@@ -1,0 +1,25 @@
+# Chrome Extension
+*.pem
+*.crx
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Backup files
+*-complex.js
+*-complex.html
+*-complex.json
+0.3.2_0/
+
+# Node (if used)
+node_modules/
+package-lock.json

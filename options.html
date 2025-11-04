@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SPZ Yakalayıcı - Ayarlar</title>
+  <style>
+    body {
+      padding: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .section {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    .format-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .format-item {
+      display: flex;
+      align-items: center;
+      background: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    .format-item button {
+      margin-left: 10px;
+      border: none;
+      background: #ff4444;
+      color: white;
+      border-radius: 3px;
+      cursor: pointer;
+      padding: 2px 6px;
+    }
+    .add-format {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    .add-format input {
+      padding: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .add-format button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 5px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .save-message {
+      color: #4CAF50;
+      margin-top: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <h2>Desteklenen Dosya Formatları</h2>
+    <div id="formatList" class="format-list">
+      <!-- Format listesi buraya dinamik olarak eklenecek -->
+    </div>
+    <div class="add-format">
+      <input type="text" id="newFormat" placeholder=".uzantı (örn: .spz)" 
+             pattern="^\.[a-zA-Z0-9]+$" title="Nokta ile başlayan alfanumerik uzantı">
+      <button id="addFormat">Format Ekle</button>
+    </div>
+    <div id="saveMessage" class="save-message">
+      Ayarlar kaydedildi!
+    </div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
