@@ -29,13 +29,24 @@ async function getTitleFromTab(tabId) {
           return text.trim();
         }
         
+        // Meta tag'den content almak için helper
+        function getMetaContent(selector) {
+          const meta = document.querySelector(selector);
+          if (!meta) return null;
+          return meta.getAttribute('content') || meta.content || null;
+        }
+        
         // Tüm olası başlık kaynaklarını sırayla kontrol et
         const titleSources = [
-          // 1. Meta tags - En güvenilir
-          () => document.querySelector('meta[property="og:title"]')?.content,
-          () => document.querySelector('meta[name="twitter:title"]')?.content,
-          () => document.querySelector('meta[property="twitter:title"]')?.content,
-          () => document.querySelector('meta[name="title"]')?.content,
+          // 1. Open Graph ve Meta tags - En güvenilir (çoklu kontrol)
+          () => getMetaContent('meta[property="og:title"]'),
+          () => getMetaContent('meta[name="og:title"]'),
+          () => getMetaContent('meta[property="twitter:title"]'),
+          () => getMetaContent('meta[name="twitter:title"]'),
+          () => getMetaContent('meta[property="title"]'),
+          () => getMetaContent('meta[name="title"]'),
+          () => getMetaContent('meta[itemprop="name"]'),
+          () => getMetaContent('meta[itemprop="title"]'),
           
           // 2. Data attributes - Modal/Dialog başlıklar
           () => extractTextFromElement(document.querySelector('[data-slot="dialog-header"]')),
@@ -99,11 +110,23 @@ async function getTitleFromTab(tabId) {
         ];
 
         // İlk geçerli başlığı bul
-        for (const getTitle of titleSources) {
+        for (let i = 0; i < titleSources.length; i++) {
           try {
-            const title = getTitle();
+            const title = titleSources[i]();
             if (title && title.trim() && title.trim().length > 2) {
-              console.log('✓ Title found:', title.trim());
+              const sources = [
+                'og:title (property)', 'og:title (name)', 'twitter:title (property)', 'twitter:title (name)',
+                'title (property)', 'title (name)', 'itemprop name', 'itemprop title',
+                'data-slot=dialog-header', 'data-slot=header', 'data-testid title', 'data-testid header',
+                'data-title attr', 'role=dialog aria-label', 'role=dialog header', 'aria-labelledby',
+                '.dialog-title', '.modal-title', '.modal-header h1', '.modal-header h2',
+                '.popup-title', '.overlay-title', '.title', 'role=dialog h1', 'role=dialog h2',
+                'dialog h1', 'dialog h2', 'main h1', 'article h1', '#main h1',
+                '.main h1', '.content h1', 'first h1', 'header h1', 'header h2',
+                'header .title', 'document.title', 'meta description', 'visible headings'
+              ];
+              console.log('✓ Title extracted from:', sources[i] || `source #${i}`);
+              console.log('  Title:', title.trim());
               return title.trim();
             }
           } catch(e) {
