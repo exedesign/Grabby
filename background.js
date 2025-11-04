@@ -22,36 +22,99 @@ async function getTitleFromTab(tabId) {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tabId },
       func: () => {
-        // Sırayla tüm olası başlık kaynaklarını kontrol et
-        const sources = [
-          // Open Graph başlığı
+        // Başlık çıkarma yardımcı fonksiyonu
+        function extractTextFromElement(element) {
+          if (!element) return null;
+          const text = element.textContent || element.innerText || element.getAttribute('aria-label') || '';
+          return text.trim();
+        }
+        
+        // Tüm olası başlık kaynaklarını sırayla kontrol et
+        const titleSources = [
+          // 1. Meta tags - En güvenilir
           () => document.querySelector('meta[property="og:title"]')?.content,
-          // Twitter başlığı  
           () => document.querySelector('meta[name="twitter:title"]')?.content,
-          // Diyalog/Modal başlıkları
-          () => document.querySelector('.dialog-title, .modal-title, [role="dialog"] h1, [role="dialog"] h2')?.textContent,
-          // Ana başlık
-          () => document.querySelector('h1')?.textContent,
-          // Sayfa başlığı
+          () => document.querySelector('meta[property="twitter:title"]')?.content,
+          () => document.querySelector('meta[name="title"]')?.content,
+          
+          // 2. Data attributes - Modal/Dialog başlıklar
+          () => extractTextFromElement(document.querySelector('[data-slot="dialog-header"]')),
+          () => extractTextFromElement(document.querySelector('[data-slot="header"]')),
+          () => extractTextFromElement(document.querySelector('[data-testid*="title"]')),
+          () => extractTextFromElement(document.querySelector('[data-testid*="header"]')),
+          () => extractTextFromElement(document.querySelector('[data-title]')),
+          
+          // 3. ARIA labels ve roles
+          () => extractTextFromElement(document.querySelector('[role="dialog"] [aria-label]')),
+          () => extractTextFromElement(document.querySelector('[role="dialog"] header')),
+          () => extractTextFromElement(document.querySelector('[aria-labelledby]')),
+          
+          // 4. Common class names
+          () => extractTextFromElement(document.querySelector('.dialog-title')),
+          () => extractTextFromElement(document.querySelector('.modal-title')),
+          () => extractTextFromElement(document.querySelector('.modal-header h1')),
+          () => extractTextFromElement(document.querySelector('.modal-header h2')),
+          () => extractTextFromElement(document.querySelector('.popup-title')),
+          () => extractTextFromElement(document.querySelector('.overlay-title')),
+          () => extractTextFromElement(document.querySelector('.title')),
+          
+          // 5. Dialog/Modal içindeki heading'ler
+          () => extractTextFromElement(document.querySelector('[role="dialog"] h1')),
+          () => extractTextFromElement(document.querySelector('[role="dialog"] h2')),
+          () => extractTextFromElement(document.querySelector('dialog h1')),
+          () => extractTextFromElement(document.querySelector('dialog h2')),
+          
+          // 6. Main content area başlıkları
+          () => extractTextFromElement(document.querySelector('main h1')),
+          () => extractTextFromElement(document.querySelector('article h1')),
+          () => extractTextFromElement(document.querySelector('#main h1')),
+          () => extractTextFromElement(document.querySelector('.main h1')),
+          () => extractTextFromElement(document.querySelector('.content h1')),
+          
+          // 7. İlk h1 elementi
+          () => extractTextFromElement(document.querySelector('h1')),
+          
+          // 8. Header içindeki başlık
+          () => extractTextFromElement(document.querySelector('header h1')),
+          () => extractTextFromElement(document.querySelector('header h2')),
+          () => extractTextFromElement(document.querySelector('header .title')),
+          
+          // 9. Sayfa başlığı
           () => document.title,
-          // Meta description (son çare)
-          () => document.querySelector('meta[name="description"]')?.content
+          
+          // 10. Meta description (son çare)
+          () => document.querySelector('meta[name="description"]')?.content,
+          
+          // 11. İlk visible heading (h1-h3)
+          () => {
+            const headings = document.querySelectorAll('h1, h2, h3');
+            for (const h of headings) {
+              const rect = h.getBoundingClientRect();
+              if (rect.width > 0 && rect.height > 0) {
+                return extractTextFromElement(h);
+              }
+            }
+            return null;
+          }
         ];
 
-        // İlk bulunan geçerli başlığı döndür
-        for (const getTitle of sources) {
+        // İlk geçerli başlığı bul
+        for (const getTitle of titleSources) {
           try {
             const title = getTitle();
-            if (title && title.trim() && title.trim().length > 0) {
+            if (title && title.trim() && title.trim().length > 2) {
+              console.log('✓ Title found:', title.trim());
               return title.trim();
             }
           } catch(e) {
-            // Devam et
+            // Sessizce devam et
           }
         }
         
         // Hiçbir şey bulunamazsa hostname kullan
-        return window.location.hostname + '-model';
+        const fallback = window.location.hostname.replace(/^www\./, '') + '-model';
+        console.log('⚠ No title found, using fallback:', fallback);
+        return fallback;
       }
     });
     
