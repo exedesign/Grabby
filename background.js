@@ -16,6 +16,56 @@ chrome.storage.sync.get('formats', ({ formats }) => {
   }
 });
 
+// Tab'dan title almak için helper fonksiyon
+async function getTitleFromTab(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        // Sırayla tüm olası başlık kaynaklarını kontrol et
+        const sources = [
+          // Open Graph başlığı
+          () => document.querySelector('meta[property="og:title"]')?.content,
+          // Twitter başlığı  
+          () => document.querySelector('meta[name="twitter:title"]')?.content,
+          // Diyalog/Modal başlıkları
+          () => document.querySelector('.dialog-title, .modal-title, [role="dialog"] h1, [role="dialog"] h2')?.textContent,
+          // Ana başlık
+          () => document.querySelector('h1')?.textContent,
+          // Sayfa başlığı
+          () => document.title,
+          // Meta description (son çare)
+          () => document.querySelector('meta[name="description"]')?.content
+        ];
+
+        // İlk bulunan geçerli başlığı döndür
+        for (const getTitle of sources) {
+          try {
+            const title = getTitle();
+            if (title && title.trim() && title.trim().length > 0) {
+              return title.trim();
+            }
+          } catch(e) {
+            // Devam et
+          }
+        }
+        
+        // Hiçbir şey bulunamazsa hostname kullan
+        return window.location.hostname + '-model';
+      }
+    });
+    
+    if (results && results[0] && results[0].result) {
+      return results[0].result;
+    }
+    
+    return 'model';
+  } catch (error) {
+    console.error('getTitleFromTab error:', error);
+    return 'model';
+  }
+}
+
 // Bir dosyanın hedef uzantılardan birine sahip olup olmadığını kontrol et
 function isTargetFile(url, disposition) {
   if (!url) return false;
@@ -65,82 +115,48 @@ const monitor = {
       const cache = fileCache.get(details.tabId);
       
       if (!cache.has(details.url)) {
-        // Önce sayfa başlığını al
-        chrome.scripting.executeScript({
-          target: { tabId: details.tabId },
-          function: () => {
-            // Sırayla tüm olası başlık kaynaklarını kontrol et
-            const sources = [
-              // Open Graph başlığı
-              () => document.querySelector('meta[property="og:title"]')?.content,
-              // Twitter başlığı
-              () => document.querySelector('meta[name="twitter:title"]')?.content,
-              // Diyalog başlıkları
-              () => document.querySelector('.dialog-title, .modal-title, [role="dialog"] h1, [role="dialog"] h2')?.textContent,
-              // Ana başlık
-              () => document.querySelector('h1')?.textContent,
-              // Sayfa başlığı
-              () => document.title,
-              // Meta description
-              () => document.querySelector('meta[name="description"]')?.content
-            ];
-
-            // İlk bulunan geçerli başlığı döndür
-            for (const getTitle of sources) {
-              try {
-                const title = getTitle();
-                if (title && title.trim() && title.trim().length > 0) {
-                  console.log('Bulunan başlık:', title.trim());
-                  return title.trim();
-                }
-              } catch(e) {}
-            }
-            console.log('Başlık bulunamadı, URL kullanılacak');
-            return window.location.hostname + '-model';
+        // Önce varsayılan değerle dosyayı ekle
+        cache.set(details.url, {
+          size: fileSize,
+          title: null  // Başlık henüz alınmadı
+        });
+        
+        // Badge'i güncelle
+        chrome.action.setBadgeText({
+          text: String(cache.size),
+          tabId: details.tabId
+        });
+        chrome.action.setBadgeBackgroundColor({
+          color: '#667eea',
+          tabId: details.tabId
+        });
+        
+        // Sayfa başlığını asenkron olarak al
+        getTitleFromTab(details.tabId).then(pageTitle => {
+          console.log('Background: Title extracted:', pageTitle);
+          
+          // Title'ı güncelle
+          const fileData = cache.get(details.url);
+          if (fileData) {
+            fileData.title = pageTitle || 'model';
+            
+            // Storage'a kaydet
+            chrome.storage.local.set({
+              [`files_${details.tabId}`]: Array.from(cache.entries())
+            });
           }
-        }).then(([{result: pageTitle}]) => {
-          console.log('Background: Başlık alındı:', pageTitle);
-          
-          // Dosyayı cache'e ekle
-          cache.set(details.url, {
-            size: fileSize,
-            title: pageTitle || 'model'
-          });
-          
-          // Badge'i güncelle
-          chrome.action.setBadgeText({
-            text: String(cache.size),
-            tabId: details.tabId
-          });
-          chrome.action.setBadgeBackgroundColor({
-            color: '#4CAF50',
-            tabId: details.tabId
-          });
-          
-          // Storage'a kaydet
-          chrome.storage.local.set({
-            [`files_${details.tabId}`]: Array.from(cache.entries())
-          });
         }).catch(err => {
-          console.error('Title extraction hatası:', err);
-          // Hata durumunda yine de dosyayı kaydet
-          cache.set(details.url, {
-            size: fileSize,
-            title: 'model-dosya'
-          });
+          console.error('Title extraction error:', err);
           
-          chrome.action.setBadgeText({
-            text: String(cache.size),
-            tabId: details.tabId
-          });
-          chrome.action.setBadgeBackgroundColor({
-            color: '#4CAF50',
-            tabId: details.tabId
-          });
-          
-          chrome.storage.local.set({
-            [`files_${details.tabId}`]: Array.from(cache.entries())
-          });
+          // Hata durumunda varsayılan kullan
+          const fileData = cache.get(details.url);
+          if (fileData) {
+            fileData.title = 'downloaded-model';
+            
+            chrome.storage.local.set({
+              [`files_${details.tabId}`]: Array.from(cache.entries())
+            });
+          }
         });
       }
     }
