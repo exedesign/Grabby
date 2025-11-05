@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SVG to PNG Converter</title>
+  <style>
+    body {
+      font-family: system-ui;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #fff;
+    }
+    .preview {
+      display: flex;
+      gap: 20px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    .icon-preview {
+      text-align: center;
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    img {
+      display: block;
+      margin: 10px auto;
+      border: 2px solid #667eea;
+      border-radius: 4px;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 5px;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎯 Grabby Icon Generator</h1>
+  <p>SVG'yi farklı boyutlarda PNG'ye dönüştürün ve indirin.</p>
+  
+  <div class="preview" id="preview"></div>
+  
+  <script>
+    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <circle cx="64" cy="64" r="62" fill="#1a1a1a" stroke="#764ba2" stroke-width="2"/>
+  <g id="segments">
+    <circle cx="64" cy="64" r="56" fill="none" stroke="#667eea" stroke-width="1" opacity="0.3"/>
+    <circle cx="64" cy="64" r="48" fill="none" stroke="#764ba2" stroke-width="1" opacity="0.3"/>
+    <circle cx="64" cy="64" r="40" fill="none" stroke="#667eea" stroke-width="2"/>
+    <circle cx="64" cy="64" r="32" fill="none" stroke="#764ba2" stroke-width="2"/>
+    <circle cx="64" cy="64" r="20" fill="#667eea" opacity="0.6"/>
+    <circle cx="64" cy="64" r="12" fill="#764ba2"/>
+    <circle cx="64" cy="64" r="6" fill="#fff"/>
+    <line x1="64" y1="8" x2="64" y2="120" stroke="#667eea" stroke-width="1" opacity="0.4"/>
+    <line x1="8" y1="64" x2="120" y2="64" stroke="#667eea" stroke-width="1" opacity="0.4"/>
+    <line x1="18" y1="18" x2="110" y2="110" stroke="#764ba2" stroke-width="1" opacity="0.3"/>
+    <line x1="110" y1="18" x2="18" y2="110" stroke="#764ba2" stroke-width="1" opacity="0.3"/>
+  </g>
+  <g id="dart" transform="translate(45, 25)">
+    <path d="M 15 8 L 20 13 L 15 18 L 10 13 Z" fill="#fff" stroke="#667eea" stroke-width="1"/>
+    <line x1="15" y1="13" x2="30" y2="28" stroke="#fff" stroke-width="2"/>
+    <path d="M 28 26 L 30 28 L 32 26" fill="none" stroke="#764ba2" stroke-width="1.5"/>
+  </g>
+</svg>`;
+
+    const sizes = [16, 32, 48, 128];
+    const preview = document.getElementById('preview');
+
+    function svgToPng(svgContent, size) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        const img = new Image();
+        const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, size, size);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        
+        img.src = url;
+      });
+    }
+
+    async function generateIcons() {
+      for (const size of sizes) {
+        const pngData = await svgToPng(svgContent, size);
+        
+        const container = document.createElement('div');
+        container.className = 'icon-preview';
+        
+        const img = document.createElement('img');
+        img.src = pngData;
+        img.width = size;
+        img.height = size;
+        
+        const label = document.createElement('div');
+        label.textContent = `${size}x${size}`;
+        label.style.marginBottom = '10px';
+        label.style.fontWeight = 'bold';
+        label.style.color = '#667eea';
+        
+        const downloadBtn = document.createElement('button');
+        downloadBtn.textContent = 'Download';
+        downloadBtn.onclick = () => {
+          const a = document.createElement('a');
+          a.href = pngData;
+          a.download = `icon${size}.png`;
+          a.click();
+        };
+        
+        container.appendChild(label);
+        container.appendChild(img);
+        container.appendChild(downloadBtn);
+        preview.appendChild(container);
+      }
+    }
+
+    generateIcons();
+  </script>
+</body>
+</html>
