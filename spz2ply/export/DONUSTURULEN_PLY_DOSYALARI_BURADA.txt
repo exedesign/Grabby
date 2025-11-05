@@ -1,0 +1,22 @@
+📤 EXPORT KLASÖRÜ
+=================
+
+Bu klasörde dönüştürülen PLY dosyalarınız hazır halde bekliyor!
+
+✅ DÖNÜŞTÜRME TAMAMLANDI:
+Burası dönüştürülen .ply dosyalarının bulunduğu yerdir.
+
+🎯 PLY DOSYALARI HAKKINDA:
+• 3D modelleme programlarında açılabilir
+• Point cloud verilerini içerir  
+• Meshlab, CloudCompare gibi araçlarla görüntülenebilir
+
+💾 DOSYA YÖNETİMİ:
+• Dosyalar otomatik olarak tarih ile adlandırılır
+• Aynı isimli dosya varsa otomatik numara eklenir
+• Manuel olarak yeniden adlandırabilirsiniz
+
+🔧 KULLANIM ÖNERİLERİ:
+• İşlem sonrası dosyaları başka bir yere taşıyın
+• Düzenli olarak bu klasörü temizleyin
+• Büyük dosyalar için yeterli disk alanı bırakın

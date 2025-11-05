@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const fileList = document.getElementById('fileList');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -237,23 +237,33 @@ fileList.addEventListener('click', function(e) {
   console.log('  Safe title:', safeTitle);
   console.log('  Date:', date);
   console.log('  Final filename:', filename);
-  console.log('  Message sent to Chrome:', {cmd: 'download', url: url, filename: filename});
   
   button.disabled = true;
   button.textContent = typeof t === 'function' ? t('downloading') : 'Downloading...';
   
-  chrome.runtime.sendMessage({cmd: 'download', url: url, filename: filename}, function(resp) {
+  // Normal indirme mesajı
+  const downloadMessage = {
+    cmd: 'download', 
+    url: url, 
+    filename: filename
+  };
+  
+  console.log('  Message sent to Chrome:', downloadMessage);
+  
+  chrome.runtime.sendMessage(downloadMessage, function(resp) {
     console.log('  Download response:', resp);
+    
     const downloadedText = typeof t === 'function' ? t('downloaded') : 'Downloaded ✓';
     const errorText = typeof t === 'function' ? t('error') : 'Error!';
     const downloadText = typeof t === 'function' ? t('download') : 'Download';
     
     if (resp && resp.success) {
       button.textContent = downloadedText;
+      
       setTimeout(function() {
         button.textContent = downloadText;
         button.disabled = false;
-      }, 2000);
+      }, 3000);
     } else {
       button.textContent = errorText;
       setTimeout(function() {
@@ -276,6 +286,7 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
   if (namespace === 'sync') displayFormatsInPopup();
 });
 
+// Settings modal event handlers - tek seferlik tanımlama
 settingsBtn.addEventListener('click', function() {
   settingsModal.classList.add('show');
   displayActiveFormats();
@@ -285,16 +296,25 @@ closeBtn.addEventListener('click', function() {
   settingsModal.classList.remove('show');
 });
 
+closeModalBtn.addEventListener('click', function() {
+  settingsModal.classList.remove('show');
+});
+
 settingsModal.addEventListener('click', function(e) {
   if (e.target === settingsModal) settingsModal.classList.remove('show');
 });
 
+// Format management functions - sadece bir kez tanımla
 async function displayActiveFormats() {
   const x = await chrome.storage.sync.get('formats');
   const formats = x.formats || DEFAULT_FORMATS;
+  const deleteText = typeof t === 'function' ? t('delete') : 'Delete';
+  
   activeFormatsList.innerHTML = formats.map(function(f) {
-    return '<div class="format-item"><span>' + f + '</span><button class="delete-format" data-format="' + f + '">Delete</button></div>';
+    return '<div class="format-item"><span>' + f + '</span><button class="delete-format" data-format="' + f + '">' + deleteText + '</button></div>';
   }).join('');
+  
+  // Event listener'ları ekle
   activeFormatsList.querySelectorAll('.delete-format').forEach(function(btn) {
     btn.addEventListener('click', function() {
       deleteFormat(btn.dataset.format);
@@ -302,37 +322,21 @@ async function displayActiveFormats() {
   });
 }
 
-addFormatBtn.addEventListener('click', async function() {
-  const fmt = newFormatInput.value.trim().toLowerCase();
-  if (!/^\.[a-zA-Z0-9]+$/.test(fmt)) {
-    alert('Please enter a valid format (e.g. .spz)');
-    return;
-  }
-  const x = await chrome.storage.sync.get('formats');
-  const formats = x.formats || DEFAULT_FORMATS;
-  if (formats.includes(fmt)) {
-    alert('This format already exists!');
-    return;
-  }
-  const newFormats = formats.concat([fmt]).sort();
-  await chrome.storage.sync.set({formats: newFormats});
-  chrome.runtime.sendMessage({cmd: 'updateFormats', formats: newFormats});
-  newFormatInput.value = '';
-  await displayActiveFormats();
-  showSaveMessage();
-  displayFormatsInPopup(newFormats);
-});
+
 
 async function deleteFormat(format) {
   const x = await chrome.storage.sync.get('formats');
   const formats = x.formats || DEFAULT_FORMATS;
+  
   if (formats.length <= 1) {
-    alert('At least one format is required!');
+    alert(typeof t === 'function' ? t('minOneFormat') : 'At least one format is required!');
     return;
   }
+  
   const newFormats = formats.filter(function(f) {return f !== format;});
   await chrome.storage.sync.set({formats: newFormats});
   chrome.runtime.sendMessage({cmd: 'updateFormats', formats: newFormats});
+  
   await displayActiveFormats();
   showSaveMessage();
   displayFormatsInPopup(newFormats);
@@ -350,110 +354,92 @@ async function displayFormatsInPopup(formats) {
   formatsList.innerHTML = fmt.map(function(f) {return '<span class="format-tag">' + f + '</span>';}).join('');
 }
 
+// SPZ info banner kontrolü
+function checkAndShowSpzBanner(files) {
+  const spzInfoBanner = document.getElementById('spzInfoBanner');
+  const hasSpzFiles = files.some(item => {
+    const url = item[0];
+    const urlLower = url.toLowerCase();
+    return urlLower.includes('.spz');
+  });
+  
+  if (hasSpzFiles && spzInfoBanner) {
+    spzInfoBanner.style.display = 'block';
+  } else if (spzInfoBanner) {
+    spzInfoBanner.style.display = 'none';
+  }
+}
+
+// Dosya listesi gösterimi - güvenilir title handling ile
 async function showFiles() {
   const tabs = await chrome.tabs.query({active: true, currentWindow: true});
   if (!tabs || tabs.length === 0) return;
+  
   const tab = tabs[0];
   const key = 'files_' + tab.id;
   const data = await chrome.storage.local.get(key);
   const files = data[key] || [];
   
+  // SPZ banner kontrolü
+  checkAndShowSpzBanner(files);
+  
+  // İnternasyonalizasyon desteği 
+  const noFilesText = typeof t === 'function' ? t('noFiles') : 'No files found';
+  const noFilesDescText = typeof t === 'function' ? t('noFilesDesc') : 'Files will be scanned when page reloads.';
+  const sizeUnknownText = typeof t === 'function' ? t('sizeUnknown') : 'Unknown';
+  const downloadText = typeof t === 'function' ? t('download') : 'Download';
+  
   if (files.length === 0) {
-    fileList.innerHTML = '<div class="no-files">No files found</div>';
+    fileList.innerHTML = '<div class="no-files"><span>' + noFilesText + '</span><br><span style="font-size: 11px; color: #555;">' + noFilesDescText + '</span></div>';
     return;
   }
 
   fileList.innerHTML = files.map(function(item) {
     const url = item[0];
-    const meta = item[1];
-    const fname = new URL(url).pathname.split('/').pop();
-    const sz = meta.size;
-    const sz_str = sz > 0 ? (sz / 1048576).toFixed(1) + ' MB' : 'Unknown';
-    // Title ZORUNLU - eğer yoksa varsayılan kullan
-    const title = meta.title && meta.title.trim() ? meta.title.trim() : 'Model-File';
-    console.log('Popup gösterimi - URL:', url, 'Title:', title);
-    return '<div class="file-item"><div class="file-info"><div class="file-name" title="' + title + '">' + title + '</div><div class="file-size">' + sz_str + '</div></div><button class="download-btn" data-url="' + url + '" data-title="' + title + '">Download</button></div>';
+    const meta = item[1] || {}; // Güvenli meta erişimi
+    
+    // Dosya boyutu hesaplama
+    const sz = meta.size || 0;
+    const sz_str = sz > 0 ? (sz / 1048576).toFixed(1) + ' MB' : sizeUnknownText;
+    
+    // Title güvenli erişim - undefined/null kontrolü
+    let title = 'Model-File'; // Varsayılan değer
+    if (meta.title && typeof meta.title === 'string' && meta.title.trim()) {
+      title = meta.title.trim();
+    } else {
+      // Fallback: URL'den title oluştur
+      try {
+        const urlPath = new URL(url).pathname;
+        const urlFileName = urlPath.split('/').pop();
+        if (urlFileName && urlFileName.length > 3) {
+          title = urlFileName.replace(/\.[^.]*$/, '').replace(/[-_]/g, ' ');
+        }
+      } catch (e) {
+        console.warn('URL parsing error for title fallback:', e);
+      }
+    }
+    
+    // Title'ı maksimum 60 karakterle sınırla (UI için)
+    const displayTitle = title.length > 60 ? title.substring(0, 57) + '...' : title;
+    
+    console.log('Popup file display - URL:', url, 'Title:', title, 'Display:', displayTitle);
+    
+    return '<div class="file-item">' +
+           '<div class="file-info">' +
+           '<div class="file-name" title="' + title + '">' + displayTitle + '</div>' +
+           '<div class="file-size">' + sz_str + '</div>' +
+           '</div>' +
+           '<button class="download-btn" data-url="' + url + '" data-title="' + title + '">' + downloadText + '</button>' +
+           '</div>';
   }).join('');
 }
 
-fileList.addEventListener('click', function(e) {
-  const button = e.target.closest('.download-btn');
-  if (!button) return;
-  
-  const url = button.dataset.url;
-  // Title'ı button'ın data attribute'undan al - DOM'dan değil
-  const title = button.dataset.title || 'Model-File';
-  const urlPath = new URL(url).pathname;
-  const ext = (urlPath.match(/\.[^.]+$/) || ['.spz'])[0].toLowerCase();
-  
-  console.log('Download info:');
-  console.log('  URL:', url);
-  console.log('  Title (data-title):', title);
-  console.log('  Extension:', ext);
-  
-  // Güvenli dosya adı oluştur - Türkçe karakterleri dönüştür
-  function createSafeFilename(text) {
-    if (!text) return 'file';
-    let result = text;
-    // Türkçe karakterleri dönüştür
-    result = result.replace(/ğ/g, 'g').replace(/Ğ/g, 'G');
-    result = result.replace(/ı/g, 'i').replace(/İ/g, 'I');
-    result = result.replace(/ş/g, 's').replace(/Ş/g, 'S');
-    result = result.replace(/ç/g, 'c').replace(/Ç/g, 'C');
-    result = result.replace(/ö/g, 'o').replace(/Ö/g, 'O');
-    result = result.replace(/ü/g, 'u').replace(/Ü/g, 'U');
-    // Boşluk ve noktalari tire yap
-    result = result.replace(/[\s.]+/g, '-');
-    // Özel karakterleri kaldır
-    result = result.replace(/[&+$,/:;=?@"'<>#%{}|^~[\]`\\()]/g, '');
-    // Unicode normalizasyon
-    result = result.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-    // Sadece alfanumerik ve tire
-    result = result.replace(/[^a-zA-Z0-9-_]/g, '-');
-    // Çoklu tireleri tek tire yap
-    result = result.replace(/-+/g, '-');
-    // Baştaki ve sondaki tireleri kaldır
-    result = result.replace(/^-+|-+$/g, '');
-    // Küçük harfe çevir
-    result = result.toLowerCase();
-    // Maksimum 150 karakter
-    result = result.slice(0, 150);
-    return result || 'file';
-  }
-  
-  const date = new Date().toISOString().slice(0, 10);
-  const safeTitle = createSafeFilename(title);
-  const filename = safeTitle + '-' + date + ext;
-  
-  console.log('  Safe title:', safeTitle);
-  console.log('  Date:', date);
-  console.log('  Final filename:', filename);
-  console.log('  Message sent to Chrome:', {cmd: 'download', url: url, filename: filename});
-  
-  button.disabled = true;
-  button.textContent = 'Downloading...';
-  
-  chrome.runtime.sendMessage({cmd: 'download', url: url, filename: filename}, function(resp) {
-    console.log('  Download response:', resp);
-    if (resp && resp.success) {
-      button.textContent = 'Downloaded ✓';
-      setTimeout(function() {
-        button.textContent = 'Download';
-        button.disabled = false;
-      }, 2000);
-    } else {
-      button.textContent = 'Error!';
-      setTimeout(function() {
-        button.textContent = 'Download';
-        button.disabled = false;
-      }, 2000);
-    }
-  });
-});
-
+// Event listeners ve initialization - final
 document.addEventListener('DOMContentLoaded', function() {
-  showFiles();
-  displayFormatsInPopup();
+  initializeI18n().then(() => {
+    showFiles();
+    displayFormatsInPopup();
+  });
 });
 
 chrome.storage.onChanged.addListener(function(changes, namespace) {

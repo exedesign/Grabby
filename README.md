@@ -1,17 +1,38 @@
-# 🎯 Grabby
+# 🎯 Grabby - Advanced 3D Model Downloader
 
-Smart 3D model file downloader with intelligent naming and multi-language support.
+**Smart • Fast • Intuitive**
 
-## 🌟 Features
+Advanced Chrome extension for detecting, downloading, and converting 3D model files with integrated SPZ→PLY conversion.
+
+## ✨ New Features
+
+### 🔄 **Integrated SPZ2PLY Converter**
+- **Automatic Detection**: SPZ files are automatically detected and handled specially
+- **Smart Import**: SPZ files are saved to `spz2ply/import/` directory
+- **One-Click Conversion**: Run `spz2ply/run.bat` to convert all SPZ files to PLY format
+- **Intuitive Workflow**: Simple folder-based workflow with visual feedback
+
+### 🎯 **Enhanced File Detection**
+- **Improved URL Parsing**: Better handling of Content-Disposition headers
+- **Multiple Format Support**: Enhanced detection for .spz, .ply, .splat, .gsplat, .npz
+- **Smart Fallbacks**: Multiple detection methods for reliability
+
+### 🏷️ **Project-Focused Title Extraction**
+- **Model-Specific Titles**: Extracts project/model names instead of generic page titles
+- **Smart Filtering**: Removes site names and generic terms automatically
+- **Multiple Sources**: JSON-LD, Open Graph, model viewer elements, headings
+- **Intelligent Scoring**: Prioritizes project-relevant information
+
+## 🌟 Core Features
 
 - 🔍 **Auto-Detection**: Automatically finds 3D model files on web pages
-- 📝 **Smart Naming**: Downloads files with page title instead of URL filename
+- 📝 **Smart Naming**: Downloads files with project titles instead of URL filenames
 - 🎨 **Dark Theme**: Beautiful dark mode interface with purple gradients
 - 🔧 **Customizable Formats**: Add or remove file formats to monitor
-- � **Multi-Language**: Supports 10 languages (English, Turkish, Spanish, French, German, Chinese, Japanese, Russian, Portuguese, Arabic)
+- 🌍 **Multi-Language**: Supports 10 languages (English, Turkish, Spanish, French, German, Chinese, Japanese, Russian, Portuguese, Arabic)
 - 💾 **Custom Downloads**: Save files with date-stamped custom names
 - 🔔 **Badge Counter**: Shows detected file count on extension icon
-- 📋 **Title Extraction**: Uses og:title, meta tags, and page title for smart naming
+- 📋 **Title Extraction**: Uses advanced algorithms for project-specific naming
 
 ## 📦 Installation
 

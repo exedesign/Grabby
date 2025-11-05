@@ -66,6 +66,27 @@
       margin: 0;
       padding-left: 20px;
     }
+    .spz-info-banner {
+      margin: 15px;
+      padding: 12px;
+      background: linear-gradient(135deg, rgba(255, 152, 0, 0.1) 0%, rgba(255, 193, 7, 0.1) 100%);
+      border-radius: 8px;
+      font-size: 13px;
+      color: #ffb74d;
+      border-left: 3px solid #ff9800;
+      border: 1px solid rgba(255, 152, 0, 0.3);
+    }
+    .spz-info-banner strong {
+      color: #ffa726;
+    }
+    .spz-info-banner code {
+      background: rgba(255, 152, 0, 0.2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #fff3e0;
+    }
     .file-list {
       max-height: 300px;
       overflow-y: auto;
@@ -365,6 +386,18 @@
       <li data-i18n="step2">Count shown in extension icon badge</li>
       <li data-i18n="step3">Click "Download" to save with custom name</li>
     </ol>
+  </div>
+
+  <!-- SPZ2PLY Info Banner -->
+  <div class="spz-info-banner" id="spzInfoBanner" style="display: none;">
+    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+      <span style="font-size: 16px; margin-right: 8px;">🔄</span>
+      <strong>SPZ → PLY Converter</strong>
+    </div>
+    <div style="font-size: 12px; line-height: 1.3;">
+      SPZ files are automatically saved to <code>spz2ply/import/</code><br>
+      Run <code>spz2ply/run.bat</code> to convert to PLY format
+    </div>
   </div>
 
   <div id="fileList" class="file-list">
