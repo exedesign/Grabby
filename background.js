@@ -16,142 +16,6 @@ chrome.storage.sync.get('formats', ({ formats }) => {
   }
 });
 
-// Tab'dan title almak için helper fonksiyon
-async function getTitleFromTab(tabId) {
-  try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      func: () => {
-        // Başlık çıkarma yardımcı fonksiyonu
-        function extractTextFromElement(element) {
-          if (!element) return null;
-          const text = element.textContent || element.innerText || element.getAttribute('aria-label') || '';
-          return text.trim();
-        }
-        
-        // Meta tag'den content almak için helper
-        function getMetaContent(selector) {
-          const meta = document.querySelector(selector);
-          if (!meta) return null;
-          return meta.getAttribute('content') || meta.content || null;
-        }
-        
-        // Tüm olası başlık kaynaklarını sırayla kontrol et
-        const titleSources = [
-          // 1. Open Graph ve Meta tags - En güvenilir (çoklu kontrol)
-          () => getMetaContent('meta[property="og:title"]'),
-          () => getMetaContent('meta[name="og:title"]'),
-          () => getMetaContent('meta[property="twitter:title"]'),
-          () => getMetaContent('meta[name="twitter:title"]'),
-          () => getMetaContent('meta[property="title"]'),
-          () => getMetaContent('meta[name="title"]'),
-          () => getMetaContent('meta[itemprop="name"]'),
-          () => getMetaContent('meta[itemprop="title"]'),
-          
-          // 2. Data attributes - Modal/Dialog başlıklar
-          () => extractTextFromElement(document.querySelector('[data-slot="dialog-header"]')),
-          () => extractTextFromElement(document.querySelector('[data-slot="header"]')),
-          () => extractTextFromElement(document.querySelector('[data-testid*="title"]')),
-          () => extractTextFromElement(document.querySelector('[data-testid*="header"]')),
-          () => extractTextFromElement(document.querySelector('[data-title]')),
-          
-          // 3. ARIA labels ve roles
-          () => extractTextFromElement(document.querySelector('[role="dialog"] [aria-label]')),
-          () => extractTextFromElement(document.querySelector('[role="dialog"] header')),
-          () => extractTextFromElement(document.querySelector('[aria-labelledby]')),
-          
-          // 4. Common class names
-          () => extractTextFromElement(document.querySelector('.dialog-title')),
-          () => extractTextFromElement(document.querySelector('.modal-title')),
-          () => extractTextFromElement(document.querySelector('.modal-header h1')),
-          () => extractTextFromElement(document.querySelector('.modal-header h2')),
-          () => extractTextFromElement(document.querySelector('.popup-title')),
-          () => extractTextFromElement(document.querySelector('.overlay-title')),
-          () => extractTextFromElement(document.querySelector('.title')),
-          
-          // 5. Dialog/Modal içindeki heading'ler
-          () => extractTextFromElement(document.querySelector('[role="dialog"] h1')),
-          () => extractTextFromElement(document.querySelector('[role="dialog"] h2')),
-          () => extractTextFromElement(document.querySelector('dialog h1')),
-          () => extractTextFromElement(document.querySelector('dialog h2')),
-          
-          // 6. Main content area başlıkları
-          () => extractTextFromElement(document.querySelector('main h1')),
-          () => extractTextFromElement(document.querySelector('article h1')),
-          () => extractTextFromElement(document.querySelector('#main h1')),
-          () => extractTextFromElement(document.querySelector('.main h1')),
-          () => extractTextFromElement(document.querySelector('.content h1')),
-          
-          // 7. İlk h1 elementi
-          () => extractTextFromElement(document.querySelector('h1')),
-          
-          // 8. Header içindeki başlık
-          () => extractTextFromElement(document.querySelector('header h1')),
-          () => extractTextFromElement(document.querySelector('header h2')),
-          () => extractTextFromElement(document.querySelector('header .title')),
-          
-          // 9. Sayfa başlığı
-          () => document.title,
-          
-          // 10. Meta description (son çare)
-          () => document.querySelector('meta[name="description"]')?.content,
-          
-          // 11. İlk visible heading (h1-h3)
-          () => {
-            const headings = document.querySelectorAll('h1, h2, h3');
-            for (const h of headings) {
-              const rect = h.getBoundingClientRect();
-              if (rect.width > 0 && rect.height > 0) {
-                return extractTextFromElement(h);
-              }
-            }
-            return null;
-          }
-        ];
-
-        // İlk geçerli başlığı bul
-        for (let i = 0; i < titleSources.length; i++) {
-          try {
-            const title = titleSources[i]();
-            if (title && title.trim() && title.trim().length > 2) {
-              const sources = [
-                'og:title (property)', 'og:title (name)', 'twitter:title (property)', 'twitter:title (name)',
-                'title (property)', 'title (name)', 'itemprop name', 'itemprop title',
-                'data-slot=dialog-header', 'data-slot=header', 'data-testid title', 'data-testid header',
-                'data-title attr', 'role=dialog aria-label', 'role=dialog header', 'aria-labelledby',
-                '.dialog-title', '.modal-title', '.modal-header h1', '.modal-header h2',
-                '.popup-title', '.overlay-title', '.title', 'role=dialog h1', 'role=dialog h2',
-                'dialog h1', 'dialog h2', 'main h1', 'article h1', '#main h1',
-                '.main h1', '.content h1', 'first h1', 'header h1', 'header h2',
-                'header .title', 'document.title', 'meta description', 'visible headings'
-              ];
-              console.log('✓ Title extracted from:', sources[i] || `source #${i}`);
-              console.log('  Title:', title.trim());
-              return title.trim();
-            }
-          } catch(e) {
-            // Sessizce devam et
-          }
-        }
-        
-        // Hiçbir şey bulunamazsa hostname kullan
-        const fallback = window.location.hostname.replace(/^www\./, '') + '-model';
-        console.log('⚠ No title found, using fallback:', fallback);
-        return fallback;
-      }
-    });
-    
-    if (results && results[0] && results[0].result) {
-      return results[0].result;
-    }
-    
-    return 'model';
-  } catch (error) {
-    console.error('getTitleFromTab error:', error);
-    return 'model';
-  }
-}
-
 // Bir dosyanın hedef uzantılardan birine sahip olup olmadığını kontrol et
 function isTargetFile(url, disposition) {
   if (!url) return false;
@@ -201,48 +65,174 @@ const monitor = {
       const cache = fileCache.get(details.tabId);
       
       if (!cache.has(details.url)) {
-        // Önce varsayılan değerle dosyayı ekle
-        cache.set(details.url, {
-          size: fileSize,
-          title: null  // Başlık henüz alınmadı
-        });
-        
-        // Badge'i güncelle
-        chrome.action.setBadgeText({
-          text: String(cache.size),
-          tabId: details.tabId
-        });
-        chrome.action.setBadgeBackgroundColor({
-          color: '#667eea',
-          tabId: details.tabId
-        });
-        
-        // Sayfa başlığını asenkron olarak al
-        getTitleFromTab(details.tabId).then(pageTitle => {
-          console.log('Background: Title extracted:', pageTitle);
-          
-          // Title'ı güncelle
-          const fileData = cache.get(details.url);
-          if (fileData) {
-            fileData.title = pageTitle || 'model';
+        // Önce sayfa başlığını al - Gelişmiş title extraction
+        chrome.scripting.executeScript({
+          target: { tabId: details.tabId },
+          function: () => {
+            // Meta property'leri analiz et ve en uygun title'ı bul
+            function extractTitle() {
+              const results = [];
+              
+              // 1. Open Graph Protocol (Facebook, LinkedIn vb.)
+              const ogTitle = document.querySelector('meta[property="og:title"]')?.content;
+              if (ogTitle?.trim()) {
+                results.push({ source: 'og:title', title: ogTitle.trim(), priority: 10 });
+              }
+              
+              // 2. Twitter Card
+              const twitterTitle = document.querySelector('meta[name="twitter:title"]')?.content;
+              if (twitterTitle?.trim()) {
+                results.push({ source: 'twitter:title', title: twitterTitle.trim(), priority: 9 });
+              }
+              
+              // 3. Schema.org name
+              const schemaName = document.querySelector('meta[itemprop="name"]')?.content;
+              if (schemaName?.trim()) {
+                results.push({ source: 'schema:name', title: schemaName.trim(), priority: 8 });
+              }
+              
+              // 4. DC (Dublin Core) title
+              const dcTitle = document.querySelector('meta[name="DC.title"]')?.content ||
+                            document.querySelector('meta[name="dc.title"]')?.content;
+              if (dcTitle?.trim()) {
+                results.push({ source: 'DC.title', title: dcTitle.trim(), priority: 7 });
+              }
+              
+              // 5. Apple mobile web app title
+              const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content;
+              if (appleTitle?.trim()) {
+                results.push({ source: 'apple-title', title: appleTitle.trim(), priority: 6 });
+              }
+              
+              // 6. Application name
+              const appName = document.querySelector('meta[name="application-name"]')?.content;
+              if (appName?.trim()) {
+                results.push({ source: 'app-name', title: appName.trim(), priority: 5 });
+              }
+              
+              // 7. Custom data attributes (bazı siteler data-title kullanır)
+              const dataTitle = document.querySelector('[data-page-title]')?.getAttribute('data-page-title') ||
+                               document.querySelector('[data-title]')?.getAttribute('data-title');
+              if (dataTitle?.trim()) {
+                results.push({ source: 'data-title', title: dataTitle.trim(), priority: 4 });
+              }
+              
+              // 8. H1 heading (genellikle ana başlık)
+              const h1Text = document.querySelector('h1')?.textContent?.trim();
+              if (h1Text && h1Text.length < 200) { // Çok uzun h1'leri atla
+                results.push({ source: 'h1', title: h1Text, priority: 3 });
+              }
+              
+              // 9. Document title
+              if (document.title?.trim()) {
+                results.push({ source: 'document.title', title: document.title.trim(), priority: 2 });
+              }
+              
+              // 10. URL pathname (son çare)
+              const pathname = window.location.pathname.split('/').filter(p => p).pop();
+              if (pathname) {
+                const urlTitle = decodeURIComponent(pathname).replace(/[-_]/g, ' ');
+                results.push({ source: 'url', title: urlTitle, priority: 1 });
+              }
+              
+              // En yüksek priority'ye sahip olan + en kısa ve anlamlı olanı seç
+              if (results.length > 0) {
+                // Priority'ye göre sırala, sonra uzunluğa göre (kısa tercih)
+                results.sort((a, b) => {
+                  if (b.priority !== a.priority) return b.priority - a.priority;
+                  return a.title.length - b.title.length;
+                });
+                
+                const selected = results[0];
+                console.log('🎯 Grabby - Title extraction results:');
+                console.log('  All candidates:', results.map(r => `[${r.priority}] ${r.source}: ${r.title.substring(0, 50)}`));
+                console.log('  ✅ Selected:', selected.source, '→', selected.title);
+                
+                return selected.title;
+              }
+              
+              // Hiçbir şey bulunamazsa
+              console.log('⚠️ No title found, using hostname');
+              return window.location.hostname + '-model';
+            }
             
-            // Storage'a kaydet
-            chrome.storage.local.set({
-              [`files_${details.tabId}`]: Array.from(cache.entries())
-            });
+            return extractTitle();
           }
+        }).then(([{result: pageTitle}]) => {
+          console.log('Background: Title extracted →', pageTitle);
+          
+          // Title'ı temizle ve normalize et
+          function cleanTitle(title) {
+            if (!title) return 'model';
+            
+            // Gereksiz site adlarını ve ayraçları temizle
+            let cleaned = title;
+            
+            // " - Site Name", " | Site Name", " :: Site Name" gibi kısımları kaldır
+            cleaned = cleaned.split(/\s*[-–—|::•]\s*(?=[A-Z])/)[0]; 
+            
+            // Başta/sonda boşlukları temizle
+            cleaned = cleaned.trim();
+            
+            // Eğer çok kısa kaldıysa orijinali kullan
+            if (cleaned.length < 5 && title.length > 5) {
+              cleaned = title;
+            }
+            
+            // Çok uzun başlıkları kısalt (ilk 100 karakter)
+            if (cleaned.length > 100) {
+              cleaned = cleaned.substring(0, 100).trim();
+            }
+            
+            console.log('  Cleaned title:', cleaned);
+            return cleaned;
+          }
+          
+          const finalTitle = cleanTitle(pageTitle) || 'model';
+          
+          // Dosyayı cache'e ekle
+          cache.set(details.url, {
+            size: fileSize,
+            title: finalTitle
+          });
+          
+          // Badge'i güncelle
+          chrome.action.setBadgeText({
+            text: String(cache.size),
+            tabId: details.tabId
+          });
+          chrome.action.setBadgeBackgroundColor({
+            color: '#4CAF50',
+            tabId: details.tabId
+          });
+          
+          // Storage'a kaydet
+          chrome.storage.local.set({
+            [`files_${details.tabId}`]: Array.from(cache.entries())
+          });
         }).catch(err => {
           console.error('Title extraction error:', err);
+          // Hata durumunda URL'den bir başlık oluştur
+          const urlPath = new URL(details.url).pathname;
+          const urlTitle = urlPath.split('/').filter(p => p).pop()?.replace(/[-_.]/g, ' ') || 'model-file';
           
-          // Hata durumunda varsayılan kullan
-          const fileData = cache.get(details.url);
-          if (fileData) {
-            fileData.title = 'downloaded-model';
-            
-            chrome.storage.local.set({
-              [`files_${details.tabId}`]: Array.from(cache.entries())
-            });
-          }
+          cache.set(details.url, {
+            size: fileSize,
+            title: urlTitle
+          });
+          
+          chrome.action.setBadgeText({
+            text: String(cache.size),
+            tabId: details.tabId
+          });
+          chrome.action.setBadgeBackgroundColor({
+            color: '#4CAF50',
+            tabId: details.tabId
+          });
+          
+          chrome.storage.local.set({
+            [`files_${details.tabId}`]: Array.from(cache.entries())
+          });
         });
       }
     }
