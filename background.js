@@ -73,13 +73,15 @@ const monitor = {
             function extractTitle() {
               const results = [];
               
-              // 1. Open Graph Protocol (Facebook, LinkedIn vb.)
+              // 1. ÖNCELIK: Open Graph Protocol (Facebook, LinkedIn vb.)
+              // og:title varsa diğerlerini kontrol etme bile, direkt bunu kullan
               const ogTitle = document.querySelector('meta[property="og:title"]')?.content;
-              if (ogTitle?.trim()) {
-                results.push({ source: 'og:title', title: ogTitle.trim(), priority: 10 });
+              if (ogTitle?.trim() && ogTitle.trim().length > 2) {
+                console.log('🎯 og:title found! Using it directly:', ogTitle.trim());
+                return ogTitle.trim();
               }
               
-              // 2. Twitter Card
+              // 2. Twitter Card (og:title yoksa)
               const twitterTitle = document.querySelector('meta[name="twitter:title"]')?.content;
               if (twitterTitle?.trim()) {
                 results.push({ source: 'twitter:title', title: twitterTitle.trim(), priority: 9 });
