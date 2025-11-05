@@ -26,22 +26,38 @@ async function initializeI18n() {
 
 // Update all UI text with current language
 function updateUIText() {
+  // Check if i18n is loaded
+  if (typeof t !== 'function') {
+    console.error('i18n not loaded yet, retrying...');
+    setTimeout(updateUIText, 100);
+    return;
+  }
+  
   // Update all elements with data-i18n attribute
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
-    el.textContent = t(key);
+    const translation = t(key);
+    if (translation) {
+      el.textContent = translation;
+    }
   });
   
   // Update placeholders
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     const key = el.getAttribute('data-i18n-placeholder');
-    el.placeholder = t(key);
+    const translation = t(key);
+    if (translation) {
+      el.placeholder = translation;
+    }
   });
   
   // Update titles
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
     const key = el.getAttribute('data-i18n-title');
-    el.title = t(key);
+    const translation = t(key);
+    if (translation) {
+      el.title = translation;
+    }
   });
 }
 
@@ -79,8 +95,9 @@ settingsModal.addEventListener('click', function(e) {
 async function displayActiveFormats() {
   const x = await chrome.storage.sync.get('formats');
   const formats = x.formats || DEFAULT_FORMATS;
+  const deleteText = typeof t === 'function' ? t('delete') : 'Delete';
   activeFormatsList.innerHTML = formats.map(function(f) {
-    return '<div class="format-item"><span>' + f + '</span><button class="delete-format" data-format="' + f + '">' + t('delete') + '</button></div>';
+    return '<div class="format-item"><span>' + f + '</span><button class="delete-format" data-format="' + f + '">' + deleteText + '</button></div>';
   }).join('');
   activeFormatsList.querySelectorAll('.delete-format').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -92,13 +109,13 @@ async function displayActiveFormats() {
 addFormatBtn.addEventListener('click', async function() {
   const fmt = newFormatInput.value.trim().toLowerCase();
   if (!/^\.[a-zA-Z0-9]+$/.test(fmt)) {
-    alert(t('invalidFormat'));
+    alert(typeof t === 'function' ? t('invalidFormat') : 'Please enter a valid format (e.g. .spz)');
     return;
   }
   const x = await chrome.storage.sync.get('formats');
   const formats = x.formats || DEFAULT_FORMATS;
   if (formats.includes(fmt)) {
-    alert(t('formatExists'));
+    alert(typeof t === 'function' ? t('formatExists') : 'This format already exists!');
     return;
   }
   const newFormats = formats.concat([fmt]).sort();
@@ -114,7 +131,7 @@ async function deleteFormat(format) {
   const x = await chrome.storage.sync.get('formats');
   const formats = x.formats || DEFAULT_FORMATS;
   if (formats.length <= 1) {
-    alert(t('minOneFormat'));
+    alert(typeof t === 'function' ? t('minOneFormat') : 'At least one format is required!');
     return;
   }
   const newFormats = formats.filter(function(f) {return f !== format;});
@@ -145,8 +162,13 @@ async function showFiles() {
   const data = await chrome.storage.local.get(key);
   const files = data[key] || [];
   
+  const noFilesText = typeof t === 'function' ? t('noFiles') : 'No files found';
+  const noFilesDescText = typeof t === 'function' ? t('noFilesDesc') : 'Files will be scanned when page reloads.';
+  const sizeUnknownText = typeof t === 'function' ? t('sizeUnknown') : 'Unknown';
+  const downloadText = typeof t === 'function' ? t('download') : 'Download';
+  
   if (files.length === 0) {
-    fileList.innerHTML = '<div class="no-files"><span>' + t('noFiles') + '</span><br><span style="font-size: 11px; color: #555;">' + t('noFilesDesc') + '</span></div>';
+    fileList.innerHTML = '<div class="no-files"><span>' + noFilesText + '</span><br><span style="font-size: 11px; color: #555;">' + noFilesDescText + '</span></div>';
     return;
   }
 
@@ -155,11 +177,11 @@ async function showFiles() {
     const meta = item[1];
     const fname = new URL(url).pathname.split('/').pop();
     const sz = meta.size;
-    const sz_str = sz > 0 ? (sz / 1048576).toFixed(1) + ' MB' : t('sizeUnknown');
+    const sz_str = sz > 0 ? (sz / 1048576).toFixed(1) + ' MB' : sizeUnknownText;
     // Title ZORUNLU - eğer yoksa varsayılan kullan
     const title = meta.title && meta.title.trim() ? meta.title.trim() : 'Model-File';
     console.log('Popup gösterimi - URL:', url, 'Title:', title);
-    return '<div class="file-item"><div class="file-info"><div class="file-name" title="' + title + '">' + title + '</div><div class="file-size">' + sz_str + '</div></div><button class="download-btn" data-url="' + url + '" data-title="' + title + '">' + t('download') + '</button></div>';
+    return '<div class="file-item"><div class="file-info"><div class="file-name" title="' + title + '">' + title + '</div><div class="file-size">' + sz_str + '</div></div><button class="download-btn" data-url="' + url + '" data-title="' + title + '">' + downloadText + '</button></div>';
   }).join('');
 }
 
@@ -218,20 +240,24 @@ fileList.addEventListener('click', function(e) {
   console.log('  Message sent to Chrome:', {cmd: 'download', url: url, filename: filename});
   
   button.disabled = true;
-  button.textContent = t('downloading');
+  button.textContent = typeof t === 'function' ? t('downloading') : 'Downloading...';
   
   chrome.runtime.sendMessage({cmd: 'download', url: url, filename: filename}, function(resp) {
     console.log('  Download response:', resp);
+    const downloadedText = typeof t === 'function' ? t('downloaded') : 'Downloaded ✓';
+    const errorText = typeof t === 'function' ? t('error') : 'Error!';
+    const downloadText = typeof t === 'function' ? t('download') : 'Download';
+    
     if (resp && resp.success) {
-      button.textContent = t('downloaded');
+      button.textContent = downloadedText;
       setTimeout(function() {
-        button.textContent = t('download');
+        button.textContent = downloadText;
         button.disabled = false;
       }, 2000);
     } else {
-      button.textContent = t('error');
+      button.textContent = errorText;
       setTimeout(function() {
-        button.textContent = t('download');
+        button.textContent = downloadText;
         button.disabled = false;
       }, 2000);
     }
