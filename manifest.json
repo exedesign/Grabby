@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Grabby",
-  "version": "1.0.0",
-  "description": "Smart 3D model file downloader with custom naming",
+  "version": "1.1.0",
+  "description": "Smart 3D model file downloader with custom naming and multi-language support",
   
   "permissions": [
     "storage",

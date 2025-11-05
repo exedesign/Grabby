@@ -1,17 +1,19 @@
 # 🎯 Grabby
 
-Smart 3D model file downloader with custom naming for Chrome/Edge browsers.
+Smart 3D model file downloader with intelligent naming and multi-language support.
 
-## Features
+## 🌟 Features
 
-✨ **Auto-Detection** - Automatically detects 3D model files (.spz, .ply, .splat, .gsplat, .npz)  
-📝 **Smart Naming** - Extracts page title and uses it as filename  
-🗓️ **Date Stamping** - Adds date to filename (YYYY-MM-DD format)  
-🔧 **Custom Formats** - Add/remove supported file formats  
-🌙 **Dark Theme** - Beautiful dark UI with purple gradient  
-🇹🇷 **Turkish Support** - Converts Turkish characters for safe filenames  
+- 🔍 **Auto-Detection**: Automatically finds 3D model files on web pages
+- 📝 **Smart Naming**: Downloads files with page title instead of URL filename
+- 🎨 **Dark Theme**: Beautiful dark mode interface with purple gradients
+- 🔧 **Customizable Formats**: Add or remove file formats to monitor
+- � **Multi-Language**: Supports 10 languages (English, Turkish, Spanish, French, German, Chinese, Japanese, Russian, Portuguese, Arabic)
+- 💾 **Custom Downloads**: Save files with date-stamped custom names
+- 🔔 **Badge Counter**: Shows detected file count on extension icon
+- 📋 **Title Extraction**: Uses og:title, meta tags, and page title for smart naming
 
-## Installation
+## 📦 Installation
 
 ### Chrome/Edge
 
@@ -19,21 +21,137 @@ Smart 3D model file downloader with custom naming for Chrome/Edge browsers.
 2. Open `chrome://extensions/` (or `edge://extensions/`)
 3. Enable "Developer mode"
 4. Click "Load unpacked"
-5. Select the `spz-yakala` folder
+5. Select the extension folder
+6. The Grabby icon will appear in your Chrome toolbar
 
-## Usage
+## 🚀 Usage
 
-1. **Navigate** to a page with 3D model files
-2. **Badge** shows count of detected files
-3. **Click** extension icon to see file list
-4. **Download** with custom filename based on page title
+1. Visit any web page with 3D model files
+2. Grabby automatically detects supported file formats
+3. Click the extension icon to see detected files
+4. Choose your preferred language from settings (⚙️)
+5. Click "Download" to save files with custom names
+6. Files are saved with format: `page-title-YYYY-MM-DD.extension`
+
+## 🌐 Supported Languages
+
+- 🇬🇧 English
+- 🇹🇷 Türkçe (Turkish)
+- 🇪🇸 Español (Spanish)
+- 🇫🇷 Français (French)
+- 🇩🇪 Deutsch (German)
+- 🇨🇳 中文 (Chinese)
+- 🇯🇵 日本語 (Japanese)
+- 🇷🇺 Русский (Russian)
+- 🇧🇷 Português (Portuguese)
+- 🇸🇦 العربية (Arabic)
 
 ## Settings
 
 Click the ⚙️ icon to:
-- View active formats
-- Add new file formats
-- Remove formats (minimum 1 required)
+- **Change Language** - Select from 10 supported languages
+- **View Active Formats** - See currently monitored file types
+- **Add New Formats** - Add custom file extensions
+- **Remove Formats** - Delete unwanted formats (minimum 1 required)
+
+## 🎯 Supported Formats (Default)
+
+- `.spz` - SPZ files
+- `.ply` - PLY point clouds
+- `.splat` - Splat files
+- `.gsplat` - GSplat files
+- `.npz` - NumPy compressed arrays
+
+You can add or remove formats through the settings panel.
+
+## ⚙️ Technical Details
+
+### Title Extraction Priority
+1. `og:title` (OpenGraph) - Absolute priority
+2. `twitter:title` (Twitter Cards)
+3. `article:title` (Article metadata)
+4. `headline` (Schema.org)
+5. `name` (Generic meta name)
+6. Page `<title>` tag
+7. First `<h1>` tag
+8. Meta description (shortened)
+9. Site name fallback
+10. Domain name (last resort)
+
+### File Detection
+- Network monitoring via `webRequest` API
+- Content-Disposition header parsing
+- Content-Type validation (including multiple PLY MIME types)
+- URL path segment analysis
+- Query parameter handling
+
+### Filename Sanitization
+- Turkish character conversion (ğ→g, ı→i, ş→s, ç→c, ö→o, ü→u)
+- Special character removal
+- Unicode normalization
+- Maximum 150 character limit
+- Lowercase conversion
+
+## 🛠️ Development
+
+### File Structure
+```
+grabby/
+├── manifest.json       # Extension configuration
+├── background.js       # Service worker (file detection)
+├── popup.html          # Extension popup UI
+├── popup.js            # Popup logic and i18n handling
+├── i18n.js             # Translation system
+├── options.html        # Options page
+├── icons/              # Extension icons
+└── README.md           # This file
+```
+
+### Key APIs Used
+- `chrome.webRequest` - Network monitoring
+- `chrome.downloads` - Custom file downloads
+- `chrome.storage` - Settings and file tracking
+- `chrome.scripting` - Title extraction
+
+## 📝 Changelog
+
+### v1.1.0 (2025-11-05)
+- ✨ Added multi-language support (10 languages)
+- 🌍 Language selector in settings panel
+- 🔄 Dynamic UI translation system
+- 📚 i18n translation library
+- 🎨 Enhanced settings modal with language section
+- 💾 Language preference persistence
+
+### v1.0.0 (2025-11-05)
+- ✨ Enhanced .ply file detection with Content-Type support
+- 🔍 Added multiple PLY MIME type support
+- 🎯 og:title absolute priority for title extraction
+- 📊 Enhanced title extraction with 10 priority sources
+- 🎨 Dark theme with purple gradients
+- 💾 Custom filename downloads
+- ⚙️ Format management system
+- 🔔 Badge counter for detected files
+
+## 📄 License
+
+MIT License - Feel free to use and modify!
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 🐛 Issues
+
+Found a bug? Please open an issue on GitHub with:
+- Browser version
+- Extension version
+- Steps to reproduce
+- Expected vs actual behavior
+
+---
+
+Made with ❤️ for 3D enthusiasts
 
 ## How It Works
 
