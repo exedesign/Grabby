@@ -17,7 +17,7 @@ chrome.storage.sync.get('formats', ({ formats }) => {
 });
 
 // Bir dosyanın hedef uzantılardan birine sahip olup olmadığını kontrol et
-function isTargetFile(url, disposition) {
+function isTargetFile(url, disposition, contentType) {
   if (!url) return false;
   
   // Content-Disposition başlığından dosya adını kontrol et
@@ -25,6 +25,7 @@ function isTargetFile(url, disposition) {
     const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
     if (matches && matches.length) {
       const filename = matches[1].replace(/['"]/g, '').toLowerCase();
+      console.log('  Checking filename from Content-Disposition:', filename);
       if (TARGET_EXTENSIONS.some(ext => filename.endsWith(ext))) {
         return true;
       }
@@ -33,7 +34,44 @@ function isTargetFile(url, disposition) {
   
   // URL'yi kontrol et (sorgu parametrelerini temizleyerek)
   const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
-  return TARGET_EXTENSIONS.some(ext => cleanUrl.endsWith(ext));
+  
+  // URL path'indeki son segment'i al
+  const urlPath = new URL(url).pathname;
+  const lastSegment = urlPath.split('/').pop()?.toLowerCase() || '';
+  
+  console.log('  Checking URL:', cleanUrl);
+  console.log('  Last segment:', lastSegment);
+  
+  // Dosya uzantısı kontrolü
+  const hasExtension = TARGET_EXTENSIONS.some(ext => {
+    const match = cleanUrl.endsWith(ext) || lastSegment.endsWith(ext);
+    if (match) console.log('  ✅ Matched extension:', ext);
+    return match;
+  });
+  
+  if (hasExtension) return true;
+  
+  // Content-Type bazlı kontrol (bazı sunucular .ply dosyalarını farklı MIME type'larla gönderebilir)
+  if (contentType) {
+    const ct = contentType.toLowerCase();
+    const plyMimeTypes = [
+      'application/octet-stream',
+      'application/ply',
+      'model/ply',
+      'text/plain',
+      'application/x-ply'
+    ];
+    
+    if (plyMimeTypes.some(mime => ct.includes(mime)) && 
+        (lastSegment.includes('.ply') || lastSegment.includes('.splat') || 
+         lastSegment.includes('.spz') || lastSegment.includes('.gsplat') || 
+         lastSegment.includes('.npz'))) {
+      console.log('  ✅ Matched via Content-Type:', ct);
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 // Ağ isteklerini dinle
@@ -51,8 +89,10 @@ const monitor = {
     // Content-Disposition başlığını kontrol et
     const disposition = details.responseHeaders
       .find(h => h.name.toLowerCase() === 'content-disposition');
-
-    if (isTargetFile(details.url, disposition?.value)) {
+    
+    if (isTargetFile(details.url, disposition?.value, contentType?.value)) {
+      console.log('✅ Target file detected:', details.url);
+      
       // Dosya boyutunu al
       const contentLength = details.responseHeaders
         .find(h => h.name.toLowerCase() === 'content-length');
