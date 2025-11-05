@@ -24,14 +24,6 @@ Thumbs.db
 node_modules/
 package-lock.json
 
-# SPZ ve PLY dosyaları - büyük olabilir
-*.spz
-*.ply
-
-# Import ve export klasörlerindeki dosyalar (örnek dosyalar hariç)
-spz2ply/import/*.spz
-spz2ply/export/*.ply
-
 # Temporary dosyalar
 *.tmp
 *.temp
