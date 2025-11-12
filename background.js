@@ -221,9 +221,27 @@ function isTargetFile(url, disposition, contentType) {
 
 // Gaussian Splatting dosyalarını tarayan fonksiyon
 async function scanForGaussianSplatting(tabId, baseUrl) {
-  console.log('🔍 Scanning for Gaussian Splatting files...');
+  console.log('🔍 Scanning for Gaussian Splatting files...', { tabId, baseUrl });
   
   try {
+    // TabId geçerliliğini kontrol et
+    if (!tabId || tabId < 0) {
+      console.warn('Invalid tabId for Gaussian scan:', tabId);
+      return false;
+    }
+    
+    // Tab'ın mevcut olup olmadığını kontrol et
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) {
+        console.warn('Cannot scan special URL:', tab?.url);
+        return false;
+      }
+    } catch (tabError) {
+      console.warn('Tab not found or not accessible:', tabId, tabError.message);
+      return false;
+    }
+    
     // Content script kullanarak dosya varlığını kontrol et ve proje adını al
     const results = await chrome.scripting.executeScript({
       target: { tabId: tabId },
@@ -301,39 +319,58 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
       }
     });
 
-    if (results && results[0] && results[0].result) {
-      const result = results[0].result;
-      
-      if (result.foundFiles && result.foundFiles.length > 0) {
-        console.log('🎯 Found', result.foundFiles.length, 'Gaussian Splatting files');
-        
-        // Virtual URL ile proje oluştur
-        const virtualUrl = 'gaussian-splatting://project/' + tabId;
-        
-        // Cache'e ekle
-        if (!fileCache.has(tabId)) {
-          fileCache.set(tabId, new Map());
-        }
-        const cache = fileCache.get(tabId);
-        
-        cache.set(virtualUrl, {
-          isGaussianProject: true,
-          projectTitle: result.projectTitle,
-          files: result.foundFiles,
-          timestamp: Date.now()
-        });
-        
-        // Storage'a kaydet
-        await updateStorage(tabId, cache);
-        
-        return true;
-      }
+    // Results kontrolü
+    console.log('Script execution results:', results);
+    
+    if (!results || !Array.isArray(results) || results.length === 0) {
+      console.warn('No results from script execution');
+      return false;
     }
+    
+    const result = results[0]?.result;
+    if (!result) {
+      console.warn('No result data from script execution');
+      return false;
+    }
+    
+    if (result.foundFiles && Array.isArray(result.foundFiles) && result.foundFiles.length > 0) {
+      console.log('🎯 Found', result.foundFiles.length, 'Gaussian Splatting files');
+      
+      // Virtual URL ile proje oluştur
+      const virtualUrl = 'gaussian-splatting://project/' + tabId;
+      
+      // Cache'e ekle
+      if (!fileCache.has(tabId)) {
+        fileCache.set(tabId, new Map());
+      }
+      const cache = fileCache.get(tabId);
+      
+      cache.set(virtualUrl, {
+        isGaussianProject: true,
+        projectTitle: result.projectTitle,
+        files: result.foundFiles,
+        timestamp: Date.now()
+      });
+      
+      // Storage'a kaydet
+      await updateStorage(tabId, cache);
+      
+      return true;
+    } else {
+      console.log('No Gaussian Splatting files found or no foundFiles array');
+      return false;
+    }
+    
   } catch (error) {
     console.error('Gaussian Splatting scan error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    console.log('TabId:', tabId, 'BaseUrl:', baseUrl);
+    return false;
   }
-  
-  return false;
 }
 
 // Storage güncelleme fonksiyonu
