@@ -3,6 +3,17 @@
 // Varsayılan formatlar
 const DEFAULT_FORMATS = ['.spz', '.ply', '.splat', '.gsplat', '.npz'];
 
+// Gaussian Splatting WebP dosya isimleri
+const GAUSSIAN_SPLATTING_FILES = [
+  'means_l.webp',
+  'means_u.webp', 
+  'scales.webp',
+  'quats.webp',
+  'sh0.webp',
+  'shN_centroids.webp',
+  'shN_labels.webp'
+];
+
 // Aktif dosya uzantıları
 let TARGET_EXTENSIONS = [...DEFAULT_FORMATS];
 
@@ -12,18 +23,49 @@ const fileCache = new Map(); // tabId -> Set<url>
 // Formatları storage'dan yükle
 chrome.storage.sync.get('formats', ({ formats }) => {
   if (formats) {
+    console.log('📋 Loading custom formats from storage:', formats);
     TARGET_EXTENSIONS = formats;
+  } else {
+    console.log('📋 Using default formats:', DEFAULT_FORMATS);
   }
+  console.log('🎯 Current TARGET_EXTENSIONS:', TARGET_EXTENSIONS);
 });
+
+// URL'den dosya adı çıkaran yardımcı fonksiyon
+function getFilenameFromUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    return pathname.split('/').pop() || '';
+  } catch (e) {
+    return url.split('/').pop() || '';
+  }
+}
 
 // Bir dosyanın hedef uzantılardan birine sahip olup olmadığını kontrol et
 function isTargetFile(url, disposition, contentType) {
   if (!url) return false;
   
+  // Debug logging
+  console.log('🔍 TESTING FILE:', url);
+  console.log('  Content-Disposition:', disposition || 'none');
+  console.log('  Content-Type:', contentType || 'none');
+  console.log('  Current Target Extensions:', TARGET_EXTENSIONS);
+  
   let checkedFilenames = [];
+  
+  // Gaussian Splatting WebP dosyalarını kontrol et
+  const filename = getFilenameFromUrl(url);
+  console.log('  Base filename from URL:', filename);
+  
+  if (GAUSSIAN_SPLATTING_FILES.some(gsFile => filename.toLowerCase().includes(gsFile))) {
+    console.log('  ✅ Gaussian Splatting WebP file detected:', filename);
+    return true;
+  }
   
   // 1. Content-Disposition başlığından dosya adını kontrol et
   if (disposition) {
+    console.log('  📋 Checking Content-Disposition:', disposition);
     // RFC 5987 ve RFC 6266 uyumlu parsing
     const filenameRegexes = [
       /filename\*?=([^;]*)/i,           // filename= ve filename*= 
@@ -34,6 +76,7 @@ function isTargetFile(url, disposition, contentType) {
       const matches = regex.exec(disposition);
       if (matches && matches[1]) {
         let filename = matches[1];
+        console.log('    Raw match:', filename);
         
         // URL encoding ve quotes temizle
         filename = filename.replace(/['"]/g, '');
@@ -44,11 +87,14 @@ function isTargetFile(url, disposition, contentType) {
         
         if (filename) {
           checkedFilenames.push(filename);
-          console.log('  Content-Disposition filename:', filename);
+          console.log('    Processed filename:', filename);
           
           if (TARGET_EXTENSIONS.some(ext => filename.endsWith(ext))) {
-            console.log('  ✅ Matched via Content-Disposition:', filename);
+            const matchedExt = TARGET_EXTENSIONS.find(ext => filename.endsWith(ext));
+            console.log('    ✅ MATCHED via Content-Disposition:', filename, '(extension:', matchedExt + ')');
             return true;
+          } else {
+            console.log('    ❌ No extension match for:', filename);
           }
         }
       }
@@ -81,17 +127,26 @@ function isTargetFile(url, disposition, contentType) {
     console.log('  All filenames to check:', checkedFilenames);
     
     // Tüm filename adaylarını kontrol et
+    console.log('  🎯 Testing filenames against extensions:');
     for (const filename of checkedFilenames) {
-      if (TARGET_EXTENSIONS.some(ext => filename.endsWith(ext))) {
-        console.log('  ✅ Matched extension via URL:', ext, 'in', filename);
+      console.log('    Testing:', filename);
+      const matchedExt = TARGET_EXTENSIONS.find(ext => filename.endsWith(ext));
+      if (matchedExt) {
+        console.log('    ✅ MATCHED extension:', matchedExt, 'in filename:', filename);
         return true;
+      } else {
+        console.log('    ❌ No match for:', filename);
       }
     }
     
     // URL path'in kendisini de kontrol et (extension olmadan)
-    if (TARGET_EXTENSIONS.some(ext => cleanUrl.endsWith(ext))) {
-      console.log('  ✅ Matched extension in clean URL:', cleanUrl);
+    console.log('  🎯 Testing clean URL:', cleanUrl);
+    const urlMatchedExt = TARGET_EXTENSIONS.find(ext => cleanUrl.endsWith(ext));
+    if (urlMatchedExt) {
+      console.log('  ✅ MATCHED extension in URL:', urlMatchedExt);
       return true;
+    } else {
+      console.log('  ❌ No extension match in URL');
     }
     
   } catch (e) {
@@ -106,6 +161,7 @@ function isTargetFile(url, disposition, contentType) {
   
   // 3. Content-Type bazlı gelişmiş kontrol
   if (contentType) {
+    console.log('  📁 Checking Content-Type:', contentType);
     const ct = contentType.toLowerCase();
     
     // Genişletilmiş MIME type listesi
@@ -126,32 +182,158 @@ function isTargetFile(url, disposition, contentType) {
       'model/stl'
     ];
     
-    const hasModelMime = modelMimeTypes.some(mime => ct.includes(mime));
+    const matchedMime = modelMimeTypes.find(mime => ct.includes(mime));
+    const hasModelMime = !!matchedMime;
     
     if (hasModelMime) {
+      console.log('    ✅ Found matching MIME type:', matchedMime);
       // Content-Type uyumlu ise, filename'lerde target extension var mı kontrol et
       const hasTargetExtInFilenames = checkedFilenames.some(filename => 
         TARGET_EXTENSIONS.some(ext => filename.includes(ext))
       );
       
       if (hasTargetExtInFilenames) {
-        console.log('  ✅ Matched via Content-Type + filename:', ct);
+        console.log('    ✅ MATCHED via Content-Type + filename combination');
         return true;
       }
       
       // Eğer hiç filename bulunamadıysa ve MIME type model/binary ise büyük ihtimalle target file
       if (checkedFilenames.length === 0 && 
           (ct.includes('model/') || ct.includes('application/octet-stream'))) {
-        console.log('  ⚠️ Potential match via Content-Type only (no filename available):', ct);
+        console.log('    ⚠️ Potential match via Content-Type only (no filename available):', ct);
         // Konservatif yaklaşım: sadece açık model MIME type'ları kabul et
         if (ct.includes('model/ply') || ct.includes('application/ply')) {
+          console.log('    ✅ MATCHED via strong Content-Type indicator');
           return true;
         }
       }
+    } else {
+      console.log('    ❌ No matching MIME type found');
     }
   }
   
+  console.log('  ❌ NO MATCH FOUND for:', url);
+  console.log('    Checked filenames:', checkedFilenames);
+  console.log('    Target extensions:', TARGET_EXTENSIONS);
   return false;
+}
+
+// Gaussian Splatting dosyalarını tarayan fonksiyon
+async function scanForGaussianSplatting(tabId, baseUrl) {
+  console.log('🔍 Scanning for Gaussian Splatting files...');
+  
+  try {
+    // Content script kullanarak dosya varlığını kontrol et ve proje adını al
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      function: () => {
+        const GAUSSIAN_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp'];
+        
+        // Sayfa başlığını al
+        let projectTitle = document.title || 'Gaussian Splatting Model';
+        if (projectTitle.toLowerCase().includes('untitled') || !projectTitle.trim()) {
+          // Alternatif title kaynakları
+          const h1 = document.querySelector('h1');
+          if (h1 && h1.textContent.trim()) {
+            projectTitle = h1.textContent.trim();
+          } else {
+            projectTitle = 'Gaussian Splatting Model';
+          }
+        }
+        
+        const foundFiles = [];
+        const currentUrl = window.location.href;
+        const baseDir = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
+        
+        // Her bir Gaussian dosyasını kontrol et
+        return Promise.all(GAUSSIAN_FILES.map(filename => {
+          return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => {
+              console.log('✅ Found Gaussian file:', filename);
+              foundFiles.push({
+                filename: filename,
+                url: baseDir + filename
+              });
+              resolve();
+            };
+            img.onerror = () => {
+              console.log('❌ Not found:', filename);
+              resolve();
+            };
+            img.src = baseDir + filename;
+            
+            // Timeout after 2 seconds
+            setTimeout(() => {
+              resolve();
+            }, 2000);
+          });
+        })).then(() => {
+          return {
+            projectTitle: projectTitle,
+            foundFiles: foundFiles,
+            baseUrl: baseDir
+          };
+        });
+      }
+    });
+
+    if (results && results[0] && results[0].result) {
+      const result = results[0].result;
+      
+      if (result.foundFiles && result.foundFiles.length > 0) {
+        console.log('🎯 Found', result.foundFiles.length, 'Gaussian Splatting files');
+        
+        // Virtual URL ile proje oluştur
+        const virtualUrl = 'gaussian-splatting://project/' + tabId;
+        
+        // Cache'e ekle
+        if (!fileCache.has(tabId)) {
+          fileCache.set(tabId, new Map());
+        }
+        const cache = fileCache.get(tabId);
+        
+        cache.set(virtualUrl, {
+          isGaussianProject: true,
+          projectTitle: result.projectTitle,
+          files: result.foundFiles,
+          timestamp: Date.now()
+        });
+        
+        // Storage'a kaydet
+        await updateStorage(tabId, cache);
+        
+        return true;
+      }
+    }
+  } catch (error) {
+    console.error('Gaussian Splatting scan error:', error);
+  }
+  
+  return false;
+}
+
+// Storage güncelleme fonksiyonu
+async function updateStorage(tabId, cache) {
+  try {
+    const storageData = {};
+    const fileArray = Array.from(cache.entries());
+    storageData[`files_${tabId}`] = fileArray;
+    
+    await chrome.storage.local.set(storageData);
+    
+    // Badge güncelle
+    const fileCount = fileArray.length;
+    chrome.action.setBadgeText({ 
+      text: fileCount > 0 ? fileCount.toString() : '', 
+      tabId: tabId 
+    });
+    chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+    
+    console.log('💾 Storage updated for tab', tabId, '- Files:', fileCount);
+  } catch (error) {
+    console.error('Storage update error:', error);
+  }
 }
 
 // Ağ isteklerini dinle
@@ -555,6 +737,10 @@ const monitor = {
           });
         });
       }
+    } else {
+      // Dosya tespit edilmezse, Gaussian Splatting WebP dosyalarını ara
+      console.log('ℹ️ No target file detected, checking for Gaussian Splatting WebP files...');
+      scanForGaussianSplatting(details.tabId);
     }
   },
   
@@ -652,7 +838,9 @@ chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Format güncellemesi geldiğinde
   if (request.cmd === 'updateFormats') {
+    console.log('🔄 Updating TARGET_EXTENSIONS from popup:', request.formats);
     TARGET_EXTENSIONS = request.formats;
+    console.log('✅ New TARGET_EXTENSIONS:', TARGET_EXTENSIONS);
     return;
   }
   

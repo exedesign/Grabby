@@ -172,17 +172,82 @@ async function showFiles() {
     return;
   }
 
-  fileList.innerHTML = files.map(function(item) {
+  // Gaussian Splatting dosyalarını tespit et ve grupla
+  const gaussianFiles = [];
+  const regularFiles = [];
+  const GAUSSIAN_WEBP_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp'];
+  
+  files.forEach(function(item) {
+    const url = item[0];
+    const meta = item[1];
+    const fileName = new URL(url).pathname.split('/').pop().toLowerCase();
+    
+    // Gaussian Splatting dosyası mı kontrol et
+    const isGaussianFile = GAUSSIAN_WEBP_FILES.some(function(gaussianFileName) {
+      return fileName.includes(gaussianFileName) || fileName === gaussianFileName;
+    });
+    
+    if (isGaussianFile) {
+      gaussianFiles.push({
+        url: url,
+        filename: fileName,
+        size: meta.size || 0
+      });
+    } else if (meta && meta.isGaussianProject) {
+      // Background.js'ten gelen hazır proje
+      regularFiles.push(item);
+    } else {
+      regularFiles.push(item);
+    }
+  });
+
+  let html = '';
+  
+  // Gaussian Splatting dosyaları varsa tek proje olarak göster
+  if (gaussianFiles.length > 0) {
+    // Sayfa başlığını al
+    let projectTitle = 'Gaussian Splatting Model';
+    try {
+      const pageTitle = document.title || tab.title;
+      if (pageTitle && pageTitle.trim() && pageTitle.toLowerCase() !== 'untitled') {
+        projectTitle = pageTitle.trim();
+      }
+    } catch (e) {
+      console.log('Could not get page title:', e);
+    }
+    
+    const totalSizeMB = (gaussianFiles.length * 1.2).toFixed(1); // Ortalama dosya boyutu tahmini
+    const virtualUrl = 'gaussian-project://' + tab.url;
+    
+    html += '<div class="file-item gaussian-project" style="background: linear-gradient(135deg, #1a3a1a 0%, #244424 100%); border-left: 3px solid #4CAF50;">' +
+      '<div class="file-info">' +
+      '<div class="file-name" title="' + projectTitle + '">🎯 ' + projectTitle + '</div>' +
+      '<div class="file-size">' + gaussianFiles.length + ' dosya (~' + totalSizeMB + ' MB)</div>' +
+      '<div style="font-size: 11px; color: #81C784;">Gaussian Splatting WebP Files</div>' +
+      '</div>' +
+      '<button class="download-btn gaussian-download" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);" data-url="' + virtualUrl + '" data-title="' + projectTitle + '" data-project="true" data-files="' + encodeURIComponent(JSON.stringify(gaussianFiles)) + '">' + downloadText + '</button>' +
+      '</div>';
+  }
+
+  // Normal dosyalar göster
+  html += regularFiles.map(function(item) {
     const url = item[0];
     const meta = item[1];
     const fname = new URL(url).pathname.split('/').pop();
     const sz = meta.size;
     const sz_str = sz > 0 ? (sz / 1048576).toFixed(1) + ' MB' : sizeUnknownText;
-    // Title ZORUNLU - eğer yoksa varsayılan kullan
     const title = meta.title && meta.title.trim() ? meta.title.trim() : 'Model-File';
-    console.log('Popup gösterimi - URL:', url, 'Title:', title);
-    return '<div class="file-item"><div class="file-info"><div class="file-name" title="' + title + '">' + title + '</div><div class="file-size">' + sz_str + '</div></div><button class="download-btn" data-url="' + url + '" data-title="' + title + '">' + downloadText + '</button></div>';
+    
+    return '<div class="file-item">' +
+      '<div class="file-info">' +
+      '<div class="file-name" title="' + title + '">📁 ' + fname + '</div>' +
+      '<div class="file-size">' + sz_str + '</div>' +
+      '</div>' +
+      '<button class="download-btn" data-url="' + url + '" data-title="' + title + '">' + downloadText + '</button>' +
+      '</div>';
   }).join('');
+
+  fileList.innerHTML = html;
 }
 
 fileList.addEventListener('click', function(e) {
@@ -190,8 +255,108 @@ fileList.addEventListener('click', function(e) {
   if (!button) return;
   
   const url = button.dataset.url;
-  // Title'ı button'ın data attribute'undan al - DOM'dan değil
   const title = button.dataset.title || 'Model-File';
+  const isProject = button.dataset.project === 'true';
+  
+  console.log('Download info:', {url: url, title: title, isProject: isProject});
+  
+  if (isProject) {
+    // Gaussian Splatting projesi indirme
+    downloadGaussianProject(url, title, button);
+  } else {
+    // Normal dosya indirme
+    downloadSingleFile(url, title, button);
+  }
+});
+
+// Gaussian Splatting projesi indirme fonksiyonu
+async function downloadGaussianProject(virtualUrl, projectTitle, button) {
+  console.log('🎯 Starting Gaussian Project download:', projectTitle);
+  
+  let gaussianFiles = [];
+  
+  // data-files attribute'undan dosya listesini al
+  if (button.dataset.files) {
+    try {
+      gaussianFiles = JSON.parse(decodeURIComponent(button.dataset.files));
+    } catch (e) {
+      console.error('Could not parse files data:', e);
+    }
+  }
+  
+  // Eğer data-files yoksa, eski yöntemle storage'dan al
+  if (gaussianFiles.length === 0) {
+    const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+    if (!tabs || tabs.length === 0) return;
+    
+    const tab = tabs[0];
+    const key = 'files_' + tab.id;
+    const data = await chrome.storage.local.get(key);
+    const files = data[key] || [];
+    
+    const projectData = files.find(function(item) { return item[0] === virtualUrl; });
+    if (projectData && projectData[1] && projectData[1].files) {
+      gaussianFiles = projectData[1].files;
+    }
+  }
+  
+  if (gaussianFiles.length === 0) {
+    console.error('No Gaussian files found!');
+    return;
+  }
+  
+  const safeProjectTitle = createSafeFilename(projectTitle);
+  const date = new Date().toISOString().slice(0, 10);
+  const folderName = safeProjectTitle + '-' + date;
+  
+  console.log('📦 Downloading ' + gaussianFiles.length + ' files to folder: ' + folderName);
+  
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = '📦 İndiriliyor... (0/' + gaussianFiles.length + ')';
+  
+  let downloadedCount = 0;
+  
+  for (let i = 0; i < gaussianFiles.length; i++) {
+    const file = gaussianFiles[i];
+    const fullPath = folderName + '/' + file.filename;
+    
+    try {
+      await new Promise(function(resolve, reject) {
+        chrome.runtime.sendMessage({
+          cmd: 'download', 
+          url: file.url, 
+          filename: fullPath
+        }, function(resp) {
+          downloadedCount++;
+          button.textContent = '📦 İndiriliyor... (' + downloadedCount + '/' + gaussianFiles.length + ')';
+          
+          if (resp && resp.success) {
+            console.log('✅ Downloaded: ' + file.filename);
+            resolve();
+          } else {
+            reject(new Error(resp ? resp.error : 'İndirme hatası'));
+          }
+        });
+      });
+      
+      // Kısa bekleme süresi
+      await new Promise(function(resolve) { setTimeout(resolve, 300); });
+      
+    } catch (e) {
+      console.error('Dosya indirme hatası:', file.filename, e);
+    }
+  }
+  
+  button.textContent = '✅ Tamamlandı (' + downloadedCount + '/' + gaussianFiles.length + ')';
+  setTimeout(function() {
+    button.textContent = originalText;
+    button.disabled = false;
+  }, 3000);
+}
+
+// Normal dosya indirme fonksiyonu
+function downloadSingleFile(url, title, button) {
   const urlPath = new URL(url).pathname;
   const ext = (urlPath.match(/\.[^.]+$/) || ['.spz'])[0].toLowerCase();
   
@@ -199,36 +364,6 @@ fileList.addEventListener('click', function(e) {
   console.log('  URL:', url);
   console.log('  Title (data-title):', title);
   console.log('  Extension:', ext);
-  
-  // Güvenli dosya adı oluştur - Türkçe karakterleri dönüştür
-  function createSafeFilename(text) {
-    if (!text) return 'file';
-    let result = text;
-    // Türkçe karakterleri dönüştür
-    result = result.replace(/ğ/g, 'g').replace(/Ğ/g, 'G');
-    result = result.replace(/ı/g, 'i').replace(/İ/g, 'I');
-    result = result.replace(/ş/g, 's').replace(/Ş/g, 'S');
-    result = result.replace(/ç/g, 'c').replace(/Ç/g, 'C');
-    result = result.replace(/ö/g, 'o').replace(/Ö/g, 'O');
-    result = result.replace(/ü/g, 'u').replace(/Ü/g, 'U');
-    // Boşluk ve noktalari tire yap
-    result = result.replace(/[\s.]+/g, '-');
-    // Özel karakterleri kaldır
-    result = result.replace(/[&+$,/:;=?@"'<>#%{}|^~[\]`\\()]/g, '');
-    // Unicode normalizasyon
-    result = result.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-    // Sadece alfanumerik ve tire
-    result = result.replace(/[^a-zA-Z0-9-_]/g, '-');
-    // Çoklu tireleri tek tire yap
-    result = result.replace(/-+/g, '-');
-    // Baştaki ve sondaki tireleri kaldır
-    result = result.replace(/^-+|-+$/g, '');
-    // Küçük harfe çevir
-    result = result.toLowerCase();
-    // Maksimum 150 karakter
-    result = result.slice(0, 150);
-    return result || 'file';
-  }
   
   const date = new Date().toISOString().slice(0, 10);
   const safeTitle = createSafeFilename(title);
@@ -241,7 +376,6 @@ fileList.addEventListener('click', function(e) {
   button.disabled = true;
   button.textContent = typeof t === 'function' ? t('downloading') : 'Downloading...';
   
-  // Normal indirme mesajı
   const downloadMessage = {
     cmd: 'download', 
     url: url, 
@@ -259,7 +393,6 @@ fileList.addEventListener('click', function(e) {
     
     if (resp && resp.success) {
       button.textContent = downloadedText;
-      
       setTimeout(function() {
         button.textContent = downloadText;
         button.disabled = false;
@@ -272,169 +405,38 @@ fileList.addEventListener('click', function(e) {
       }, 2000);
     }
   });
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-  initializeI18n().then(() => {
-    showFiles();
-    displayFormatsInPopup();
-  });
-});
-
-chrome.storage.onChanged.addListener(function(changes, namespace) {
-  if (namespace === 'local') showFiles();
-  if (namespace === 'sync') displayFormatsInPopup();
-});
-
-// Settings modal event handlers - tek seferlik tanımlama
-settingsBtn.addEventListener('click', function() {
-  settingsModal.classList.add('show');
-  displayActiveFormats();
-});
-
-closeBtn.addEventListener('click', function() {
-  settingsModal.classList.remove('show');
-});
-
-closeModalBtn.addEventListener('click', function() {
-  settingsModal.classList.remove('show');
-});
-
-settingsModal.addEventListener('click', function(e) {
-  if (e.target === settingsModal) settingsModal.classList.remove('show');
-});
-
-// Format management functions - sadece bir kez tanımla
-async function displayActiveFormats() {
-  const x = await chrome.storage.sync.get('formats');
-  const formats = x.formats || DEFAULT_FORMATS;
-  const deleteText = typeof t === 'function' ? t('delete') : 'Delete';
-  
-  activeFormatsList.innerHTML = formats.map(function(f) {
-    return '<div class="format-item"><span>' + f + '</span><button class="delete-format" data-format="' + f + '">' + deleteText + '</button></div>';
-  }).join('');
-  
-  // Event listener'ları ekle
-  activeFormatsList.querySelectorAll('.delete-format').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      deleteFormat(btn.dataset.format);
-    });
-  });
 }
 
-
-
-async function deleteFormat(format) {
-  const x = await chrome.storage.sync.get('formats');
-  const formats = x.formats || DEFAULT_FORMATS;
-  
-  if (formats.length <= 1) {
-    alert(typeof t === 'function' ? t('minOneFormat') : 'At least one format is required!');
-    return;
-  }
-  
-  const newFormats = formats.filter(function(f) {return f !== format;});
-  await chrome.storage.sync.set({formats: newFormats});
-  chrome.runtime.sendMessage({cmd: 'updateFormats', formats: newFormats});
-  
-  await displayActiveFormats();
-  showSaveMessage();
-  displayFormatsInPopup(newFormats);
+// Güvenli dosya adı oluşturma fonksiyonu
+function createSafeFilename(text) {
+  if (!text) return 'file';
+  let result = text;
+  // Türkçe karakterleri dönüştür
+  result = result.replace(/ğ/g, 'g').replace(/Ğ/g, 'G');
+  result = result.replace(/ı/g, 'i').replace(/İ/g, 'I');
+  result = result.replace(/ş/g, 's').replace(/Ş/g, 'S');
+  result = result.replace(/ç/g, 'c').replace(/Ç/g, 'C');
+  result = result.replace(/ö/g, 'o').replace(/Ö/g, 'O');
+  result = result.replace(/ü/g, 'u').replace(/Ü/g, 'U');
+  // Boşluk ve noktalari tire yap
+  result = result.replace(/[\s.]+/g, '-');
+  // Özel karakterleri kaldır
+  result = result.replace(/[&+$,/:;=?@"'<>#%{}|^~[\]`\\()]/g, '');
+  // Unicode normalizasyon
+  result = result.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  // Sadece alfanumerik ve tire
+  result = result.replace(/[^a-zA-Z0-9-_]/g, '-');
+  // Çoklu tireleri tek tire yap
+  result = result.replace(/-+/g, '-');
+  // Baştaki ve sondaki tireleri kaldır
+  result = result.replace(/^-+|-+$/g, '');
+  // Küçük harfe çevir
+  result = result.toLowerCase();
+  // Maksimum 150 karakter
+  result = result.slice(0, 150);
+  return result || 'file';
 }
 
-function showSaveMessage() {
-  saveMessage.style.display = 'block';
-  setTimeout(function() {
-    saveMessage.style.display = 'none';
-  }, 2000);
-}
-
-async function displayFormatsInPopup(formats) {
-  const fmt = formats || (await chrome.storage.sync.get('formats')).formats || DEFAULT_FORMATS;
-  formatsList.innerHTML = fmt.map(function(f) {return '<span class="format-tag">' + f + '</span>';}).join('');
-}
-
-// SPZ info banner kontrolü
-function checkAndShowSpzBanner(files) {
-  const spzInfoBanner = document.getElementById('spzInfoBanner');
-  const hasSpzFiles = files.some(item => {
-    const url = item[0];
-    const urlLower = url.toLowerCase();
-    return urlLower.includes('.spz');
-  });
-  
-  if (hasSpzFiles && spzInfoBanner) {
-    spzInfoBanner.style.display = 'block';
-  } else if (spzInfoBanner) {
-    spzInfoBanner.style.display = 'none';
-  }
-}
-
-// Dosya listesi gösterimi - güvenilir title handling ile
-async function showFiles() {
-  const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-  if (!tabs || tabs.length === 0) return;
-  
-  const tab = tabs[0];
-  const key = 'files_' + tab.id;
-  const data = await chrome.storage.local.get(key);
-  const files = data[key] || [];
-  
-  // SPZ banner kontrolü
-  checkAndShowSpzBanner(files);
-  
-  // İnternasyonalizasyon desteği 
-  const noFilesText = typeof t === 'function' ? t('noFiles') : 'No files found';
-  const noFilesDescText = typeof t === 'function' ? t('noFilesDesc') : 'Files will be scanned when page reloads.';
-  const sizeUnknownText = typeof t === 'function' ? t('sizeUnknown') : 'Unknown';
-  const downloadText = typeof t === 'function' ? t('download') : 'Download';
-  
-  if (files.length === 0) {
-    fileList.innerHTML = '<div class="no-files"><span>' + noFilesText + '</span><br><span style="font-size: 11px; color: #555;">' + noFilesDescText + '</span></div>';
-    return;
-  }
-
-  fileList.innerHTML = files.map(function(item) {
-    const url = item[0];
-    const meta = item[1] || {}; // Güvenli meta erişimi
-    
-    // Dosya boyutu hesaplama
-    const sz = meta.size || 0;
-    const sz_str = sz > 0 ? (sz / 1048576).toFixed(1) + ' MB' : sizeUnknownText;
-    
-    // Title güvenli erişim - undefined/null kontrolü
-    let title = 'Model-File'; // Varsayılan değer
-    if (meta.title && typeof meta.title === 'string' && meta.title.trim()) {
-      title = meta.title.trim();
-    } else {
-      // Fallback: URL'den title oluştur
-      try {
-        const urlPath = new URL(url).pathname;
-        const urlFileName = urlPath.split('/').pop();
-        if (urlFileName && urlFileName.length > 3) {
-          title = urlFileName.replace(/\.[^.]*$/, '').replace(/[-_]/g, ' ');
-        }
-      } catch (e) {
-        console.warn('URL parsing error for title fallback:', e);
-      }
-    }
-    
-    // Title'ı maksimum 60 karakterle sınırla (UI için)
-    const displayTitle = title.length > 60 ? title.substring(0, 57) + '...' : title;
-    
-    console.log('Popup file display - URL:', url, 'Title:', title, 'Display:', displayTitle);
-    
-    return '<div class="file-item">' +
-           '<div class="file-info">' +
-           '<div class="file-name" title="' + title + '">' + displayTitle + '</div>' +
-           '<div class="file-size">' + sz_str + '</div>' +
-           '</div>' +
-           '<button class="download-btn" data-url="' + url + '" data-title="' + title + '">' + downloadText + '</button>' +
-           '</div>';
-  }).join('');
-}
-
-// Event listeners ve initialization - final
 document.addEventListener('DOMContentLoaded', function() {
   initializeI18n().then(() => {
     showFiles();
