@@ -175,17 +175,19 @@ async function showFiles() {
   // Gaussian Splatting dosyalarını tespit et ve grupla
   const gaussianFiles = [];
   const regularFiles = [];
-  const GAUSSIAN_WEBP_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp'];
+  const GAUSSIAN_WEBP_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp', 'meta.json'];
   
   files.forEach(function(item) {
     const url = item[0];
     const meta = item[1];
     const fileName = new URL(url).pathname.split('/').pop().toLowerCase();
     
-    // Gaussian Splatting dosyası mı kontrol et
+    // Gaussian Splatting dosyası mı kontrol et (meta.json için özel kontrol dahil)
     const isGaussianFile = GAUSSIAN_WEBP_FILES.some(function(gaussianFileName) {
       return fileName.includes(gaussianFileName) || fileName === gaussianFileName;
-    });
+    }) || (fileName.includes('meta') && fileName.includes('.json'));
+    
+    console.log('File check:', fileName, 'isGaussian:', isGaussianFile);
     
     if (isGaussianFile) {
       gaussianFiles.push({

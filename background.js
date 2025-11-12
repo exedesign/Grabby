@@ -11,7 +11,8 @@ const GAUSSIAN_SPLATTING_FILES = [
   'quats.webp',
   'sh0.webp',
   'shN_centroids.webp',
-  'shN_labels.webp'
+  'shN_labels.webp',
+  'meta.json'  // Kamera konumları ve render ayarları
 ];
 
 // Aktif dosya uzantıları
@@ -59,7 +60,7 @@ function isTargetFile(url, disposition, contentType) {
   console.log('  Base filename from URL:', filename);
   
   if (GAUSSIAN_SPLATTING_FILES.some(gsFile => filename.toLowerCase().includes(gsFile))) {
-    console.log('  ✅ Gaussian Splatting WebP file detected:', filename);
+    console.log('  ✅ Gaussian Splatting file detected:', filename);
     return true;
   }
   
@@ -227,7 +228,7 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tabId },
       function: () => {
-        const GAUSSIAN_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp'];
+        const GAUSSIAN_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp', 'meta.json'];
         
         // Sayfa başlığını al
         let projectTitle = document.title || 'Gaussian Splatting Model';
@@ -248,25 +249,47 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
         // Her bir Gaussian dosyasını kontrol et
         return Promise.all(GAUSSIAN_FILES.map(filename => {
           return new Promise(resolve => {
-            const img = new Image();
-            img.onload = () => {
-              console.log('✅ Found Gaussian file:', filename);
-              foundFiles.push({
-                filename: filename,
-                url: baseDir + filename
-              });
-              resolve();
-            };
-            img.onerror = () => {
-              console.log('❌ Not found:', filename);
-              resolve();
-            };
-            img.src = baseDir + filename;
-            
-            // Timeout after 2 seconds
-            setTimeout(() => {
-              resolve();
-            }, 2000);
+            if (filename.endsWith('.json')) {
+              // JSON dosyası için fetch kullan
+              fetch(baseDir + filename)
+                .then(response => {
+                  if (response.ok) {
+                    console.log('✅ Found Gaussian file:', filename);
+                    foundFiles.push({
+                      filename: filename,
+                      url: baseDir + filename
+                    });
+                  } else {
+                    console.log('❌ Not found:', filename);
+                  }
+                  resolve();
+                })
+                .catch(() => {
+                  console.log('❌ Not found:', filename);
+                  resolve();
+                });
+            } else {
+              // WebP dosyası için image loading
+              const img = new Image();
+              img.onload = () => {
+                console.log('✅ Found Gaussian file:', filename);
+                foundFiles.push({
+                  filename: filename,
+                  url: baseDir + filename
+                });
+                resolve();
+              };
+              img.onerror = () => {
+                console.log('❌ Not found:', filename);
+                resolve();
+              };
+              img.src = baseDir + filename;
+              
+              // Timeout after 2 seconds
+              setTimeout(() => {
+                resolve();
+              }, 2000);
+            }
           });
         })).then(() => {
           return {
@@ -740,7 +763,7 @@ const monitor = {
     } else {
       // Dosya tespit edilmezse, Gaussian Splatting WebP dosyalarını ara
       console.log('ℹ️ No target file detected, checking for Gaussian Splatting WebP files...');
-      scanForGaussianSplatting(details.tabId);
+      scanForGaussianSplatting(details.tabId, details.url);
     }
   },
   
