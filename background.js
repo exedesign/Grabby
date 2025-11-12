@@ -233,19 +233,35 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
     // Tab'ın mevcut olup olmadığını kontrol et
     try {
       const tab = await chrome.tabs.get(tabId);
-      if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) {
+      if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
         console.warn('Cannot scan special URL:', tab?.url);
         return false;
       }
+      
+      // Tab durumunu kontrol et
+      if (tab.status !== 'complete') {
+        console.warn('Tab is still loading, skipping scan:', tab.status);
+        return false;
+      }
+      
+      // Frame'in hazır olup olmadığını kontrol et
+      if (tab.discarded) {
+        console.warn('Tab is discarded, cannot inject script');
+        return false;
+      }
+      
     } catch (tabError) {
       console.warn('Tab not found or not accessible:', tabId, tabError.message);
       return false;
     }
     
-    // Content script kullanarak dosya varlığını kontrol et ve proje adını al
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      function: () => {
+    // Script injection'ı try-catch ile sar
+    let results;
+    try {
+      // Content script kullanarak dosya varlığını kontrol et ve proje adını al
+      results = await chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        function: () => {
         const GAUSSIAN_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp', 'meta.json'];
         
         // Sayfa başlığını al
@@ -318,6 +334,19 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
         });
       }
     });
+    
+    } catch (scriptError) {
+      console.error('Script injection failed:', scriptError.message);
+      
+      // Frame hatası özel kontrolü
+      if (scriptError.message.includes('Frame') || scriptError.message.includes('removed')) {
+        console.warn('Frame was removed, tab likely closed or navigated');
+      } else if (scriptError.message.includes('Cannot access')) {
+        console.warn('Cannot access tab, likely protected page');
+      }
+      
+      return false;
+    }
 
     // Results kontrolü
     console.log('Script execution results:', results);
@@ -800,7 +829,13 @@ const monitor = {
     } else {
       // Dosya tespit edilmezse, Gaussian Splatting WebP dosyalarını ara
       console.log('ℹ️ No target file detected, checking for Gaussian Splatting WebP files...');
-      scanForGaussianSplatting(details.tabId, details.url);
+      
+      // Tab durumunu kontrol et ve güvenli scan başlat
+      setTimeout(() => {
+        scanForGaussianSplatting(details.tabId, details.url).catch(scanError => {
+          console.warn('Gaussian scan failed safely:', scanError.message);
+        });
+      }, 100); // 100ms gecikme ile frame hazır olmasını bekle
     }
   },
   
