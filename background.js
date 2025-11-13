@@ -64,6 +64,13 @@ function isTargetFile(url, disposition, contentType) {
     return true;
   }
   
+  // shN dosyaları için genel pattern kontrol (sh1, sh2, sh3, sh1_centroids, etc.)
+  if (filename.includes('sh') && filename.includes('.webp') && 
+      (filename.includes('_centroids') || filename.includes('_labels') || /sh\d+\.webp/.test(filename))) {
+    console.log('  ✅ Gaussian Splatting shN file detected:', filename);
+    return true;
+  }
+  
   // 1. Content-Disposition başlığından dosya adını kontrol et
   if (disposition) {
     console.log('  📋 Checking Content-Disposition:', disposition);
@@ -261,8 +268,54 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
       // Content script kullanarak dosya varlığını kontrol et ve proje adını al
       results = await chrome.scripting.executeScript({
         target: { tabId: tabId },
-        function: () => {
+        function: async () => {
         const GAUSSIAN_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp', 'meta.json'];
+        
+        // Meta.json'dan ek shN dosyalarını çıkarma fonksiyonu
+        async function getAdditionalShNFiles(baseDir) {
+          try {
+            const metaResponse = await fetch(baseDir + 'meta.json');
+            if (metaResponse.ok) {
+              const metaData = await metaResponse.json();
+              
+              // Meta.json içindeki shN dosyalarını ara
+              const additionalFiles = [];
+              
+              // Yaygın shN dosya pattern'ları
+              const shNPatterns = [
+                'sh1.webp', 'sh2.webp', 'sh3.webp', 'sh4.webp',
+                'sh1_centroids.webp', 'sh2_centroids.webp', 'sh3_centroids.webp',
+                'sh1_labels.webp', 'sh2_labels.webp', 'sh3_labels.webp'
+              ];
+              
+              // Meta data içindeki file listelerini kontrol et
+              if (metaData.files && Array.isArray(metaData.files)) {
+                metaData.files.forEach(file => {
+                  if (file.includes('sh') && file.includes('.webp')) {
+                    additionalFiles.push(file);
+                  }
+                });
+              }
+              
+              // Spherical harmonics info varsa
+              if (metaData.sh_degree || metaData.spherical_harmonics) {
+                const shDegree = metaData.sh_degree || 3;
+                for (let i = 1; i <= shDegree; i++) {
+                  additionalFiles.push(`sh${i}.webp`);
+                  additionalFiles.push(`sh${i}_centroids.webp`);
+                  additionalFiles.push(`sh${i}_labels.webp`);
+                }
+              }
+              
+              // Unique dosyalar döndür
+              return [...new Set(additionalFiles)];
+            }
+          } catch (e) {
+            console.log('Could not read meta.json for shN files:', e);
+          }
+          
+          return [];
+        }
         
         // Sayfa başlığını al
         let projectTitle = document.title || 'Gaussian Splatting Model';
@@ -280,8 +333,15 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
         const currentUrl = window.location.href;
         const baseDir = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
         
+        // Önce meta.json'dan ek shN dosyalarını al
+        const additionalShNFiles = await getAdditionalShNFiles(baseDir);
+        console.log('Additional shN files found in meta.json:', additionalShNFiles);
+        
+        // Tüm dosya listesini birleştir (basic + ek shN dosyalar)
+        const allFilesToCheck = [...GAUSSIAN_FILES, ...additionalShNFiles];
+        
         // Her bir Gaussian dosyasını kontrol et
-        return Promise.all(GAUSSIAN_FILES.map(filename => {
+        return Promise.all(allFilesToCheck.map(filename => {
           return new Promise(resolve => {
             if (filename.endsWith('.json')) {
               // JSON dosyası için fetch kullan

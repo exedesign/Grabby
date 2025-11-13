@@ -185,7 +185,8 @@ async function showFiles() {
     // Gaussian Splatting dosyası mı kontrol et (meta.json için özel kontrol dahil)
     const isGaussianFile = GAUSSIAN_WEBP_FILES.some(function(gaussianFileName) {
       return fileName.includes(gaussianFileName) || fileName === gaussianFileName;
-    }) || (fileName.includes('meta') && fileName.includes('.json'));
+    }) || (fileName.includes('meta') && fileName.includes('.json')) ||
+       (fileName.includes('sh') && fileName.includes('.webp')); // shN dosyaları için genel pattern
     
     console.log('File check:', fileName, 'isGaussian:', isGaussianFile);
     
