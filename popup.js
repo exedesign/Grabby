@@ -175,18 +175,37 @@ async function showFiles() {
   // Gaussian Splatting dosyalarını tespit et ve grupla
   const gaussianFiles = [];
   const regularFiles = [];
-  const GAUSSIAN_WEBP_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp', 'meta.json'];
+  const GAUSSIAN_WEBP_FILES = [
+    // Core files
+    'means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 
+    // Spherical harmonics 
+    'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp',
+    'sh1.webp', 'sh2.webp', 'sh3.webp', 'sh4.webp',
+    'sh1_centroids.webp', 'sh2_centroids.webp', 'sh3_centroids.webp',
+    'sh1_labels.webp', 'sh2_labels.webp', 'sh3_labels.webp',
+    // Additional files
+    'alphas.webp', 'colors.webp', 'normals.webp', 'features.webp',
+    'opacities.webp', 'rotations.webp', 'positions.webp', 'densities.webp',
+    // Configuration files
+    'meta.json', 'config.json', 'params.json', 'camera.json', 'scene.json'
+  ];
   
   files.forEach(function(item) {
     const url = item[0];
     const meta = item[1];
     const fileName = new URL(url).pathname.split('/').pop().toLowerCase();
     
-    // Gaussian Splatting dosyası mı kontrol et (meta.json için özel kontrol dahil)
+    // Gaussian Splatting dosyası mı kontrol et (gelişmiş pattern matching)
     const isGaussianFile = GAUSSIAN_WEBP_FILES.some(function(gaussianFileName) {
       return fileName.includes(gaussianFileName) || fileName === gaussianFileName;
     }) || (fileName.includes('meta') && fileName.includes('.json')) ||
-       (fileName.includes('sh') && fileName.includes('.webp')); // shN dosyaları için genel pattern
+       (fileName.includes('sh') && fileName.includes('.webp')) || // shN dosyaları için genel pattern
+       (fileName.includes('config') && fileName.includes('.json')) ||
+       (fileName.includes('camera') && fileName.includes('.json')) ||
+       (fileName.includes('params') && fileName.includes('.json')) ||
+       (fileName.includes('scene') && fileName.includes('.json')) ||
+       ['alphas', 'colors', 'normals', 'features', 'opacities', 'rotations', 'positions', 'densities'].some(pattern => 
+         fileName.includes(pattern) && fileName.includes('.webp'));
     
     console.log('File check:', fileName, 'isGaussian:', isGaussianFile);
     

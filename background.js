@@ -5,14 +5,26 @@ const DEFAULT_FORMATS = ['.spz', '.ply', '.splat', '.gsplat', '.npz'];
 
 // Gaussian Splatting WebP dosya isimleri
 const GAUSSIAN_SPLATTING_FILES = [
-  'means_l.webp',
-  'means_u.webp', 
-  'scales.webp',
-  'quats.webp',
-  'sh0.webp',
-  'shN_centroids.webp',
-  'shN_labels.webp',
-  'meta.json'  // Kamera konumları ve render ayarları
+  // Core Gaussian Splatting files
+  'means_l.webp', 'means_u.webp', 
+  'scales.webp', 'quats.webp',
+  
+  // Spherical Harmonics files (basic)
+  'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp',
+  
+  // Extended spherical harmonics patterns  
+  'sh1.webp', 'sh2.webp', 'sh3.webp', 'sh4.webp',
+  'sh1_centroids.webp', 'sh2_centroids.webp', 'sh3_centroids.webp',
+  'sh1_labels.webp', 'sh2_labels.webp', 'sh3_labels.webp',
+  
+  // Additional Gaussian files
+  'alphas.webp', 'colors.webp', 'normals.webp',
+  'features.webp', 'opacities.webp', 'rotations.webp',
+  'positions.webp', 'densities.webp',
+  
+  // Configuration and metadata
+  'meta.json', 'config.json', 'params.json',
+  'camera.json', 'scene.json'
 ];
 
 // Aktif dosya uzantıları
@@ -68,6 +80,24 @@ function isTargetFile(url, disposition, contentType) {
   if (filename.includes('sh') && filename.includes('.webp') && 
       (filename.includes('_centroids') || filename.includes('_labels') || /sh\d+\.webp/.test(filename))) {
     console.log('  ✅ Gaussian Splatting shN file detected:', filename);
+    return true;
+  }
+  
+  // Ek Gaussian Splatting dosya türleri
+  const additionalGaussianPatterns = [
+    'alphas.webp', 'colors.webp', 'normals.webp', 'features.webp',
+    'opacities.webp', 'rotations.webp', 'positions.webp', 'densities.webp'
+  ];
+  
+  if (additionalGaussianPatterns.some(pattern => filename.toLowerCase().includes(pattern))) {
+    console.log('  ✅ Additional Gaussian Splatting file detected:', filename);
+    return true;
+  }
+  
+  // JSON configuration files
+  const jsonConfigFiles = ['config.json', 'params.json', 'camera.json', 'scene.json'];
+  if (jsonConfigFiles.some(configFile => filename.toLowerCase().includes(configFile))) {
+    console.log('  ✅ Gaussian Splatting config file detected:', filename);
     return true;
   }
   
@@ -237,23 +267,18 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
       return false;
     }
     
-    // Tab'ın mevcut olup olmadığını kontrol et
+    // Tab'ın mevcut olup olmadığını kontrol et  
+    let tab;
     try {
-      const tab = await chrome.tabs.get(tabId);
+      tab = await chrome.tabs.get(tabId);
       if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
         console.warn('Cannot scan special URL:', tab?.url);
         return false;
       }
       
       // Tab durumunu kontrol et
-      if (tab.status !== 'complete') {
-        console.warn('Tab is still loading, skipping scan:', tab.status);
-        return false;
-      }
-      
-      // Frame'in hazır olup olmadığını kontrol et
-      if (tab.discarded) {
-        console.warn('Tab is discarded, cannot inject script');
+      if (tab.status !== 'complete' || tab.discarded) {
+        console.warn('Tab not ready for script injection:', { status: tab.status, discarded: tab.discarded });
         return false;
       }
       
@@ -262,191 +287,68 @@ async function scanForGaussianSplatting(tabId, baseUrl) {
       return false;
     }
     
-    // Script injection'ı try-catch ile sar
-    let results;
+    // Basit dosya existence check ile başla (script injection olmadan)
+    console.log('Attempting simple Gaussian file detection...');
+    
+    // Basit HTTP HEAD request ile dosya varlığını kontrol et
     try {
-      // Content script kullanarak dosya varlığını kontrol et ve proje adını al
-      results = await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        function: async () => {
-        const GAUSSIAN_FILES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp', 'shN_centroids.webp', 'shN_labels.webp', 'meta.json'];
-        
-        // Meta.json'dan ek shN dosyalarını çıkarma fonksiyonu
-        async function getAdditionalShNFiles(baseDir) {
-          try {
-            const metaResponse = await fetch(baseDir + 'meta.json');
-            if (metaResponse.ok) {
-              const metaData = await metaResponse.json();
-              
-              // Meta.json içindeki shN dosyalarını ara
-              const additionalFiles = [];
-              
-              // Yaygın shN dosya pattern'ları
-              const shNPatterns = [
-                'sh1.webp', 'sh2.webp', 'sh3.webp', 'sh4.webp',
-                'sh1_centroids.webp', 'sh2_centroids.webp', 'sh3_centroids.webp',
-                'sh1_labels.webp', 'sh2_labels.webp', 'sh3_labels.webp'
-              ];
-              
-              // Meta data içindeki file listelerini kontrol et
-              if (metaData.files && Array.isArray(metaData.files)) {
-                metaData.files.forEach(file => {
-                  if (file.includes('sh') && file.includes('.webp')) {
-                    additionalFiles.push(file);
-                  }
-                });
-              }
-              
-              // Spherical harmonics info varsa
-              if (metaData.sh_degree || metaData.spherical_harmonics) {
-                const shDegree = metaData.sh_degree || 3;
-                for (let i = 1; i <= shDegree; i++) {
-                  additionalFiles.push(`sh${i}.webp`);
-                  additionalFiles.push(`sh${i}_centroids.webp`);
-                  additionalFiles.push(`sh${i}_labels.webp`);
-                }
-              }
-              
-              // Unique dosyalar döndür
-              return [...new Set(additionalFiles)];
-            }
-          } catch (e) {
-            console.log('Could not read meta.json for shN files:', e);
+      const baseUrlObj = new URL(baseUrl);
+      const baseDir = baseUrlObj.origin + baseUrlObj.pathname.substring(0, baseUrlObj.pathname.lastIndexOf('/') + 1);
+      
+      const basicGaussianFiles = [
+        'means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 
+        'sh0.webp', 'sh1.webp', 'sh2.webp', 'sh3.webp',
+        'alphas.webp', 'colors.webp', 'opacities.webp',
+        'meta.json', 'config.json', 'camera.json'
+      ];
+      const foundFiles = [];
+      
+      for (const filename of basicGaussianFiles) {
+        try {
+          const response = await fetch(baseDir + filename, { method: 'HEAD' });
+          if (response.ok) {
+            foundFiles.push({
+              filename: filename,
+              url: baseDir + filename
+            });
+            console.log('✅ Found Gaussian file:', filename);
           }
-          
-          return [];
+        } catch (fetchError) {
+          console.log('❌ Not found:', filename);
         }
+      }
+      
+      if (foundFiles.length > 0) {
+        console.log('🎯 Found', foundFiles.length, 'Gaussian Splatting files via direct check');
         
-        // Sayfa başlığını al
-        let projectTitle = document.title || 'Gaussian Splatting Model';
-        if (projectTitle.toLowerCase().includes('untitled') || !projectTitle.trim()) {
-          // Alternatif title kaynakları
-          const h1 = document.querySelector('h1');
-          if (h1 && h1.textContent.trim()) {
-            projectTitle = h1.textContent.trim();
-          } else {
-            projectTitle = 'Gaussian Splatting Model';
-          }
+        // Cache'e ekle
+        if (!fileCache.has(tabId)) {
+          fileCache.set(tabId, new Map());
         }
+        const cache = fileCache.get(tabId);
         
-        const foundFiles = [];
-        const currentUrl = window.location.href;
-        const baseDir = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
+        // Virtual URL ile proje oluştur
+        const virtualUrl = 'gaussian-splatting://project/' + tabId;
+        const projectTitle = tab.title || 'Gaussian Splatting Model';
         
-        // Önce meta.json'dan ek shN dosyalarını al
-        const additionalShNFiles = await getAdditionalShNFiles(baseDir);
-        console.log('Additional shN files found in meta.json:', additionalShNFiles);
-        
-        // Tüm dosya listesini birleştir (basic + ek shN dosyalar)
-        const allFilesToCheck = [...GAUSSIAN_FILES, ...additionalShNFiles];
-        
-        // Her bir Gaussian dosyasını kontrol et
-        return Promise.all(allFilesToCheck.map(filename => {
-          return new Promise(resolve => {
-            if (filename.endsWith('.json')) {
-              // JSON dosyası için fetch kullan
-              fetch(baseDir + filename)
-                .then(response => {
-                  if (response.ok) {
-                    console.log('✅ Found Gaussian file:', filename);
-                    foundFiles.push({
-                      filename: filename,
-                      url: baseDir + filename
-                    });
-                  } else {
-                    console.log('❌ Not found:', filename);
-                  }
-                  resolve();
-                })
-                .catch(() => {
-                  console.log('❌ Not found:', filename);
-                  resolve();
-                });
-            } else {
-              // WebP dosyası için image loading
-              const img = new Image();
-              img.onload = () => {
-                console.log('✅ Found Gaussian file:', filename);
-                foundFiles.push({
-                  filename: filename,
-                  url: baseDir + filename
-                });
-                resolve();
-              };
-              img.onerror = () => {
-                console.log('❌ Not found:', filename);
-                resolve();
-              };
-              img.src = baseDir + filename;
-              
-              // Timeout after 2 seconds
-              setTimeout(() => {
-                resolve();
-              }, 2000);
-            }
-          });
-        })).then(() => {
-          return {
-            projectTitle: projectTitle,
-            foundFiles: foundFiles,
-            baseUrl: baseDir
-          };
+        cache.set(virtualUrl, {
+          isGaussianProject: true,
+          projectTitle: projectTitle,
+          files: foundFiles,
+          timestamp: Date.now()
         });
-      }
-    });
-    
-    } catch (scriptError) {
-      console.error('Script injection failed:', scriptError.message);
-      
-      // Frame hatası özel kontrolü
-      if (scriptError.message.includes('Frame') || scriptError.message.includes('removed')) {
-        console.warn('Frame was removed, tab likely closed or navigated');
-      } else if (scriptError.message.includes('Cannot access')) {
-        console.warn('Cannot access tab, likely protected page');
+        
+        // Storage'a kaydet
+        await updateStorage(tabId, cache);
+        
+        return true;
+      } else {
+        console.log('No Gaussian Splatting files found via direct check');
+        return false;
       }
       
-      return false;
-    }
-
-    // Results kontrolü
-    console.log('Script execution results:', results);
-    
-    if (!results || !Array.isArray(results) || results.length === 0) {
-      console.warn('No results from script execution');
-      return false;
-    }
-    
-    const result = results[0]?.result;
-    if (!result) {
-      console.warn('No result data from script execution');
-      return false;
-    }
-    
-    if (result.foundFiles && Array.isArray(result.foundFiles) && result.foundFiles.length > 0) {
-      console.log('🎯 Found', result.foundFiles.length, 'Gaussian Splatting files');
-      
-      // Virtual URL ile proje oluştur
-      const virtualUrl = 'gaussian-splatting://project/' + tabId;
-      
-      // Cache'e ekle
-      if (!fileCache.has(tabId)) {
-        fileCache.set(tabId, new Map());
-      }
-      const cache = fileCache.get(tabId);
-      
-      cache.set(virtualUrl, {
-        isGaussianProject: true,
-        projectTitle: result.projectTitle,
-        files: result.foundFiles,
-        timestamp: Date.now()
-      });
-      
-      // Storage'a kaydet
-      await updateStorage(tabId, cache);
-      
-      return true;
-    } else {
-      console.log('No Gaussian Splatting files found or no foundFiles array');
+    } catch (directError) {
+      console.warn('Direct file check failed, skipping script injection:', directError.message);
       return false;
     }
     
